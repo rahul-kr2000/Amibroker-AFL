@@ -1,0 +1,26 @@
+//Plot(C,"a", colorAqua, styleCandle);
+
+//myobj = CreateStaticObject("AmiCOMTrader.Trade");
+//myobj.Sell("aasdsd", 1, "dfdfd");
+
+//StaticVarRemove( "*" );
+
+
+if (Nz(StaticVarGet("init"))==0) 
+{
+//_TRACE( NumToStr(Nz(StaticVarGet("init")) ));
+
+	//myobj = CreateStaticObject("AmiCOMTrader.Trade");
+
+	_TRACE("1");
+	StaticVarSet("init", 1);
+}
+
+
+if (Nz(StaticVarGet("init"))==1) 
+{
+_TRACE("2");
+	//myobj.Buy( "1", 2, "Close" ); // call the method of myobj COM object
+	//StaticVarSet("init", 2);
+}
+

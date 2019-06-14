@@ -1,0 +1,373 @@
+_SECTION_BEGIN("H K PLAIN CHART");
+
+//---- H K CHART
+SetChartOptions(1,chartShowArrows|chartShowDates);
+GraphXSpace=5;
+HaClose = (O+H+L+C)/4;
+HaOpen = AMA( Ref( HaClose, -1 ), 0.8);
+HaHigh = Max( H, Max( HaClose, HaOpen ) );
+HaLow = Min( L, Min( HaClose, HaOpen ) );
+xDiff = (HaHigh - Halow) * IIf(StrFind(Name(),"JPY"),100,10000);
+barcolor = IIf(HaClose >= HaOpen,colorWhite,colorWhite);
+if( ParamToggle("Plot Heikin-Ashi", "No,Yes", 1 ) )
+PlotOHLC( HaOpen, HaHigh, HaLow, HaClose, "Heikin Ashi " + Name(), colorWhite, styleCandle );
+else
+Plot( C, "Regular candles " + Name(), colorWhite, styleCandle );
+j=Haclose;
+
+//PRICE LINE
+
+PriceLineColor = PriceLineColor= colorCustom11;
+PriceLevel = C;
+
+Daysback = 200;
+FirstBar = BarCount - DaysBack;
+YY = IIf(BarIndex() >= Firstbar,EndValue(PriceLevel),Null);
+
+Plot(YY,"Current Price",PriceLineColor,ParamStyle("LineStyle",styleLine|styleDashed|styleNoTitle|styleThick,maskAll)) ;
+
+
+side = 1;
+
+dist = 0;
+
+//Magfied Market Price
+FS=20;
+GfxSelectFont("Times New Roman", FS, 700, True );
+GfxSetBkMode( colorWhite ); 
+GfxSetTextColor (colorBrightGreen );
+Hor=1;
+Ver=8;
+GfxTextOut("Unnamed 75 - LTP: "+C, Hor , Ver );
+YC=TimeFrameGetPrice("C",inDaily,-1);
+DD=Prec(C-YC,2);
+xx=Prec((DD/YC)*100,2);
+GfxSelectFont("Times New Roman", 11, 700, True );
+GfxSetBkMode( colorBlack ); 
+_SECTION_END();
+
+
+
+_SECTION_BEGIN("Trend Lines");
+p1 = Param("TL 1 Periods", 13, 1, 50, 1);
+p2 = Param("TL 2 Periods", 3, 1, 25, 1);
+TL1 = LinearReg(C, p1);
+TL2 = EMA(TL1, p2);
+Col1 = IIf(TL1 > TL2, ParamColor("TL Up Colour", colorGreen), ParamColor("TL Dn Colour", colorRed));
+Plot(TL1, "TriggerLine 1", Col1, styleLine|styleThick|styleNoLabel);
+Plot(TL2, "TriggerLine 2", Col1, styleLine|styleThick|styleNoLabel);
+
+P = ParamField("Price field",-1);
+
+Length = 100;
+
+Daysback =100;// Param("Period for Liner Regression Line",Length,1,240,1);
+shift = 0; //Param("Look back period",0,0,240,1);
+
+_SECTION_END();
+
+
+
+
+//=============================== Math Formula ================================================== ================================================== ====
+
+x = Cum(1);
+lastx = LastValue( x ) - shift;
+aa = LastValue( Ref(LinRegIntercept( p, Daysback), -shift) );
+bb = LastValue( Ref(LinRegSlope( p, Daysback ), -shift) );
+y = Aa + bb * ( x - (Lastx - DaysBack +1 ) );
+
+//==================Plot the Linear Regression Line ================================================== ==================================================
+
+LRColor = colorRed;//ParamColor("LR Color", colorCycle ); 
+LRStyle = styleLine; // ParamStyle("LR Style");
+
+LRLine = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y, Null );
+
+//LRStyle = ParamStyle("LR Style");
+Angle =0.05; //Param("Angle", 0.05, 0, 1.5, 0.01);// A slope higher than 0.05 radians will turn green, less than -0.05 will turn red and anything in between will be white.
+
+LRLine = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y, Null );
+
+Pi = 3.14159265 * atan(1); // Pi
+SlopeAngle = atan(bb)*(180/Pi);
+
+LineUp = SlopeAngle > Angle;
+LineDn = SlopeAngle < - Angle;
+
+if(LineUp)
+{
+Plot(LRLine, "Lin. Reg. Line Up", IIf(LineUp, colorBrightGreen, colorWhite), LRStyle);
+}
+else
+{
+Plot(LRLine, "Lin. Reg. Line Down", IIf(LineDn, colorDarkRed, colorWhite), LRStyle);
+} 
+
+
+
+
+//========================== Plot 1st SD Channel ================================================== ================================================== ==
+
+SDP =1.5; //Param("Standard Deviation", 1.5, 0, 6, 0.1);
+SD = SDP/2;
+
+width = LastValue( Ref(SD*StDev(p, Daysback),-shift) ); //Set width of inside chanels here.
+SDU = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y+width , Null ) ;
+SDL = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y-width , Null ) ;
+
+SDColor =colorRed; //ParamColor("SD Color", colorCycle );
+SDStyle = styleLine;//ParamStyle("SD Style");
+
+Plot( SDU , "Upper Lin Reg", colorRed,SDStyle ); //Inside Regression Lines
+Plot( SDL , "Lower Lin Reg", colorLime,SDStyle ); //Inside Regression Lines
+
+//========================== Plot 2d SD Channel ================================================== ================================================== ====
+
+SDP2 = 2.0; //Param("2d Standard Deviation", 2.0, 0, 6, 0.1);
+SD2 = SDP2/2;
+
+width2 = LastValue( Ref(SD2*StDev(p, Daysback),-shift) ); //Set width of outside chanels here. 
+SDU2 = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y+width2 , Null ) ;
+SDL2 = IIf( x > (lastx - Daysback) AND BarIndex() < Lastx, y-width2 , Null ) ;
+
+SDColor2 = colorRed; //ParamColor("2 SD Color", colorCycle );
+SDStyle2 = styleLine; //ParamStyle("2 SD Style");
+
+Plot( SDU2 , "Upper Lin Reg", colorRed,SDStyle2 ); //OutSide Regression Lines
+Plot( SDL2 , "Lower Lin Reg", colorLime,SDStyle2 ); //OutSide Regression Lines
+
+Trend = IIf(LRLine > Ref(LRLine,-1),colorGreen,colorRed);//Changes LR line to green if sloping up and red if sloping down.
+
+Plot( LRLine , "LinReg", Trend, LRSTYLE );
+
+//============================ End Indicator Code =========
+
+
+_SECTION_BEGIN("HA-VPs");
+
+// Author: Pratap Balakrishnan
+// to mark the key junction points of uptrend and downtrends as Visual Pivots for
+// trading the visual trend
+//---- heikin ashi
+HaOpen = O ;
+HaClose = (O+H+L+C)/4;
+HaOpen = AMA( Ref( HaClose, -1 ), 0.5 );
+HaHigh = Max( H, Max( HaClose, HaOpen ) );
+HaLow = Min( L, Min( HaClose, HaOpen ) );
+
+mut = HaOpen == HaLow ; // UT bar
+mdt = HaOpen == HaHigh ; // DT bar
+
+showSideways = ParamToggle("Show Sideways Markings", "No|Yes", 0) ;
+
+if (showSideways)
+{
+trendbar = mut OR mdt ;
+nextinside = IIf(mut, Ref(HaOpen,1) > HaOpen AND Ref(HaClose,1) < HaClose AND
+Ref(HaHigh,1) < HaHigh AND Ref(HaLow,1) > HaLow,
+IIf(mdt, Ref(HaOpen,1) < HaOpen AND Ref(HaClose,1) > HaClose AND
+Ref(HaHigh,1) < HaHigh AND Ref(HaLow,1) > HaLow,
+0)) ;
+
+sideways = trendbar AND nextinside ;
+swHigh = ValueWhen(sideways, HaHigh, 1) ;
+swLow = ValueWhen(sideways, Halow, 1) ;
+y0 = LastValue(swHigh) ;
+
+x = LineArray(0, y0, (BarCount-1), y0);
+
+Plot(x, "", colorGold, styleDashed);
+
+y0 = LastValue(swLow) ;
+
+x = LineArray(0, y0, (BarCount-1), y0);
+
+Plot(x, "", colorGold, styleDashed);
+}
+
+farback = Param("Far Back", 200, 1, 10000, 1) ;
+Mintbar = Param("Min Trend Bars", 0,-10, 10, 1) ;
+showvparr = ParamToggle("Show VP Arrows", "No|Yes", 1) ;
+showvptext = ParamToggle("Show VP Text", "No|Yes", 0) ;
+textdist = Param("Text Distance%", 0.1, 0, 10, 0.02) ;
+
+SetBarsRequired(int(farback*1.1)) ;
+stbar = Max(BarCount -farback, 1) ;
+bi = BarIndex() ;
+Lastbar = LastValue(bi) ;
+textdist /= 100 ; // convert to fraction from %
+
+mutst = ExRem(mut, mdt) ;
+mdtst = ExRem(mdt, mut) ;
+
+if (Mintbar > 1)
+{
+// ensure Mintbar trend bars
+for (i = stbar ; i < BarCount ; i++)
+{
+if (NOT mutst[i] AND NOT mdtst[i])
+continue ;
+
+if (mutst[i])
+{
+utst = 1 ;
+for (j = i+1 ; j < BarCount ; j++)
+{
+if (mdt[j])
+break ;
+
+if (mut[j])
+utst++ ;
+
+if (utst >= Mintbar)
+break ;
+}
+
+if (utst < Mintbar)
+mutst[i] = False ; // reset
+}
+
+if (mdtst[i])
+{
+dtst = 1 ;
+for (j = i+1 ; j < BarCount ; j++)
+{
+if (mut[j])
+break ;
+
+if (mdt[j])
+dtst++ ;
+
+if (dtst >= Mintbar)
+break ;
+}
+
+if (dtst < Mintbar)
+mdtst[i] = False ; // reset
+}
+
+}
+}
+
+mutst = ExRem(mutst, mdtst) ;
+mdtst = ExRem(mdtst, mutst) ;
+
+Hs = HighestSince(mutst, H, 1) ;
+Hsbars = HighestSinceBars(mutst, Ref(H,1), 1) ;
+Hbar = bi == (ValueWhen(mdtst OR bi == Lastbar, bi, 0) - ValueWhen(mdtst OR bi == Lastbar, Ref(Hsbars, -1) , 0)) ;
+
+Ls = LowestSince(mdtst, L, 1) ;
+Lsbars = LowestSinceBars(mdtst, Ref(L, 1), 1) ;
+Lbar = bi == (ValueWhen(mutst OR bi == Lastbar, bi, 0) - ValueWhen(mutst OR bi == Lastbar, Ref(Lsbars, -1) , 0)) ;
+
+isvph = Hbar OR mutst ;
+isvpl = Lbar OR mdtst;
+
+latestvphbi = ValueWhen(isvph, bi, 1) ;
+prevvphbi = ValueWhen(isvph, bi, 2) ;
+
+latestvplbi = ValueWhen(isvpl, bi, 1) ;
+prevvplbi = ValueWhen(isvpl, bi, 2) ;
+
+nextvphbi = ValueWhen(isvph OR bi == Lastbar, bi, 0) ;
+nextvplbi = ValueWhen(isvpl OR bi == Lastbar, bi, 0) ;
+
+dupvph = isvph AND (prevvphbi >= latestvplbi OR nextvphbi <= nextvplbi OR isvph == isvpl) ;
+dupvpl = isvpl AND (prevvplbi >= latestvphbi OR nextvplbi <= nextvphbi OR isvph == isvpl) ;
+
+nextdupvph = ValueWhen(dupvph OR bi == Lastbar, H, 0) ;
+prevdupvph = ValueWhen(dupvph, H, 2) ;
+
+nextdupvpl = ValueWhen(dupvpl OR bi == Lastbar, L, 0) ;
+prevdupvpl = ValueWhen(dupvpl, L, 2) ;
+
+nextdupvphbi = ValueWhen(dupvph OR bi == Lastbar, bi, 0) ;
+prevdupvphbi = ValueWhen(dupvph, bi, 2) ;
+
+nextdupvplbi = ValueWhen(dupvpl OR bi == Lastbar, bi, 0) ;
+prevdupvplbi = ValueWhen(dupvpl, bi, 2) ;
+
+fKeepFirst = False;
+if (fKeepFirst)
+{
+isvph = IIf(dupvph AND H < nextdupvph AND nextdupvphbi <= nextvplbi, 0, isvph) ;
+isvph = IIf(dupvph AND H <= prevdupvph AND prevdupvphbi >= latestvplbi, 0, isvph) ;
+
+isvpl = IIf(dupvpl AND L > nextdupvpl AND nextdupvplbi <= nextvphbi, 0, isvpl) ;
+isvpl = IIf(dupvpl AND L >= prevdupvpl AND prevdupvplbi >= latestvphbi, 0, isvpl) ;
+}
+else
+{
+isvph = IIf(dupvph AND H <= nextdupvph AND nextdupvphbi <= nextvplbi, 0, isvph) ;
+isvph = IIf(dupvph AND H < prevdupvph AND prevdupvphbi >= latestvplbi, 0, isvph) ;
+
+isvpl = IIf(dupvpl AND L >= nextdupvpl AND nextdupvplbi <= nextvphbi, 0, isvpl) ;
+isvpl = IIf(dupvpl AND L > prevdupvpl AND prevdupvplbi >= latestvphbi, 0, isvpl) ;
+}
+
+// revalidate last
+latestvphbi = ValueWhen(isvph, bi, 1) ;
+latestvplbi = ValueWhen(isvpl, bi, 1) ;
+
+Lastvph = LastValue(latestvphbi) ;
+Lastvpl = LastValue(latestvplbi) ;
+if( Lastvph > Lastvpl)
+{
+mdtcnt = 0 ;
+for (i = Lastvph ; i <BarCount-1 ; i++)
+{
+if (mdt[i])
+mdtcnt++ ;
+
+if (mdtcnt >= Mintbar)
+break ;
+}
+
+if (mdtcnt < Mintbar)
+isvph[Lastvph] = 0 ;
+}
+else
+{
+mutcnt = 0 ;
+for (i = Lastvpl; i <BarCount-1 ; i++)
+{
+if (mut[i])
+mutcnt++ ;
+
+if (mutcnt >= Mintbar)
+break ;
+}
+
+if (mutcnt < Mintbar)
+isvpl[Lastvpl] = 0 ;
+}
+
+if (showvparr)
+{
+
+Buy = isvpl;
+Cover=isvpl;
+Sell= isvph;
+Short=isvph;
+
+PlotShapes(shapeDownArrow*isvph, colorRed, 0, H, -12) ; 
+PlotShapes(shapeUpArrow*isvpl,colorGreen , 0, L, -12) ;
+}
+
+if (showvptext)
+{
+for (i = stbar ; i < BarCount ; i++)
+{
+if (isVph[i])
+PlotText("haVPH", i, H[i]*(1+textdist), colorBlue) ;
+
+if (isVpl[i])
+PlotText("haVPL", i, L[i]*(1-textdist*1.5), colorRed) ;
+}
+}
+
+//Title = "\n\n\n\nUnnamed 75";
+
+
+_SECTION_END();

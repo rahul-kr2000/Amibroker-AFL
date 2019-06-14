@@ -1,0 +1,130 @@
+#include <algotrader-util.afl>
+
+
+// https://www.slicontrol.com/profit-trading-system-target-stoploss-amibroker-afl/
+
+_SECTION_BEGIN("Price");
+SetChartOptions(0,chartShowArrows|chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, Close %g (%.1f%%) {{VALUES}}", O, H, L, C, SelectedValue( ROC( C, 1 ) ) ));
+
+SD = StochD(8, 3, 3);
+MH = MACD(8, 21) - Signal(8, 21, 5);
+trendup = IIf(MH > 0 OR (MH > 0 AND MH > Ref(MH, -1)) AND RSI(3) >50 AND SD < 80 AND SD > Ref(SD, -1) AND ValueWhen(C,O<C), colorBlue, colorWhite);
+trendcolor = IIf(MH < 0 OR (MH < 0 AND MH < Ref(MH, -1)) AND RSI(3) <50 AND SD > 20 AND SD < Ref(SD, -1) AND ValueWhen(C,O>C), colorRed, trendup);
+Plot( C, "Close", trendcolor, styleCandle | styleThick );
+
+//_SECTION_END();
+
+no=Param( "Swing", 5, 1, 55 );
+res=HHV(H,no);
+sup=LLV(L,no);
+tsl=IIf(ValueWhen(IIf(C>Ref(res,-1),1,IIf(C<Ref(sup,-1),-1,0))!=0,IIf(C>Ref(res,-1),1,IIf(C<Ref(sup,-1),-1,0)),1)==1,sup,res);
+Plot(tsl, _DEFAULT_NAME(), colorBlue, styleStaircase);
+Buy = Cross(C,res) ;
+Sell = Cross(sup,C)  ;
+
+//_SECTION_END();
+
+a=C;
+g=(EMA(Close,3) * (2 / 4 - 1)-EMA(Close,5) * (2 / 6 - 1)) / (2 /4- 2 /6);
+e=Ref(tsl,-1);
+Buy = Cross(C,tsl) ;
+Sell = Cross(tsl,C)  ;
+SellPrice=ValueWhen(Sell,e,1);
+BuyPrice=ValueWhen(Buy,e,1);
+
+Long=Flip(Buy,Sell);
+Shrt=Flip(Sell,Buy );
+
+SS = BarsSince(Long);
+BS = BarsSince(Shrt);
+
+//_TRACE("BS: " + BS + " - SS: " + SS);
+
+
+Filter=Buy OR Sell;
+
+//Buy = Cross(C,tsl) ;
+//Sell = Cross(tsl,C)  ;
+
+shape = Buy * shapeUpArrow + Sell * shapeDownArrow;
+PlotShapes( shape, IIf( Buy, colorGreen, colorRed ),0, IIf( Buy, Low, High ) );
+a1=Ref(tsl,-1);
+
+BS = StrToNum(NumToStr(BS));
+SS = StrToNum(NumToStr(SS));
+
+//_TRACE("BS: " + BS + " - SS: " + SS);
+
+
+
+if ( BS > 0 && BS <= 2)
+{
+	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );	
+	//_TRACE("Buy @ " + C);
+	//StaticVarSet("CrudeLastOrderType1",1);
+} 
+if (SS > 0 && SS <= 2)
+{
+	//_TRACE("BarsSinceshort1: " + StrToNum(NumToStr(BarsSinceshort)));
+	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
+	//_TRACE("SELL @ " + C);
+	//StaticVarSet("CrudeLastOrderType1",2);
+}
+
+
+
+/*
+B = NumToStr(Long,1);
+S = NumToStr(Shrt,1);
+// WORKING CODE......
+if (Nz(StaticVarGet("CrudeLastOrderType1"))==0) 
+{
+	if (B == "1")
+	{
+		//if (
+		placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), C, defaultTriggerPrice(), 1 );	
+		_TRACE("Buy @ " + C);
+		StaticVarSet("CrudeLastOrderType1",1);
+	} 
+	if (S == "1")
+	{
+		//_TRACE("BarsSinceshort1: " + StrToNum(NumToStr(BarsSinceshort)));
+		placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), C, defaultTriggerPrice(), 1 );	
+		_TRACE("SELL @ " + C);
+		StaticVarSet("CrudeLastOrderType1",2);
+	}
+}
+
+if (Nz(StaticVarGet("CrudeLastOrderType1"))==1 && S == "1")
+{
+	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
+	StaticVarSet("CrudeLastOrderType1",2);
+	_TRACE("SELL 2 @ " + C);
+} 
+
+if (Nz(StaticVarGet("CrudeLastOrderType1"))==2 && B == "1")
+{
+	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );	
+	_TRACE("BUY @ " + C);
+	StaticVarSet("CrudeLastOrderType1",1);
+} 
+*/
+
+//StaticVarRemove( "*" );
+
+
+dist = 0.8*ATR(1); //0.8
+dist1 = 1.8*ATR(1); //1.2
+for( i = 0; i < BarCount; i++ ) 
+{ 
+ if( Buy[i] ) 
+ {
+  PlotText( "Buy:" + L[ i ] + "\nTgt: " + (a1[i]*1.005) + "\nSL: " + (tsl[i]*0.9975), i, L[ i ]-dist[i], colorLime);
+ }
+ if( Sell[i] )
+ {
+  PlotText( "Sell:" + H[ i ] + "\nT: " + (a1[i]*0.995) + "\nSL: " + (tsl[i]*1.0025), i, H[ i ]+dist1[i], colorRed); 
+ }
+}
+

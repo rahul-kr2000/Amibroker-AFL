@@ -1,0 +1,1412 @@
+/*****************************************************************
+*
+* AutoTrader provided functions.
+* DO NOT MODIFY THIS FILE
+* AutoTrader 3.1.0
+*
+******************************************************************/
+
+/**
+* Constants
+*/
+AT_FILE_MODE = "a";
+AT_FILE_SHARE = True;
+AT_NA = "NA";
+AT_BLANK = "";
+AT_PLACE_ORDER_CMD = "PLACE_ORDER";
+AT_CANCEL_ORDER_CMD = "CANCEL_ORDER";
+AT_MODIFY_ORDER_CMD = "MODIFY_ORDER";
+AT_CANCEL_ORDER_SECS_CMD = "CANCEL_ORDER_IN_SECONDS";
+AT_CANCEL_ORDER_TIME_CMD = "CANCEL_ORDER_AT_TIME";
+AT_CANCEL_CHILD_ORDER_CMD = "CANCEL_CHILD_ORDER";
+AT_SLEEP_CMD = "SLEEP";
+AT_SQUARE_OFF_POSITION = "SQUARE_OFF_POSITION";
+AT_TIMEZONE_INDIA = 19800;
+AT_LAST_ORDER_TIME_KEY = "AT_LAST_ORDER_TIME";
+AT_LAST_ORDER_TRADE_TYPE_KEY = "AT_LAST_ORDER_TRADE_TYPE";
+AT_LINE_RETRY_COUNT = 20;
+AT_FIELD_SEPARATOR = ",";
+AT_MARGIN_EQUITY = "equity";
+AT_MARGIN_COMMODITY = "commodity";
+
+
+//ORDER_FILE_PATH = "C:\\autotrader\\data\\order\\orders.csv";
+ORDER_FILE_PATH = "C:\\inetpub\\wwwroot\\orders.txt";
+MARGIN_FILE_PATH = "C:\\autotrader\\data\\order\\platform_margins.csv";
+PLATFORM_ORDERS_FILE_PATH = "C:\\autotrader\\data\\order\\platform_orders.csv";
+PLATFORM_POSITIONS_FILE_PATH = "C:\\autotrader\\data\\order\\platform_positions.csv";
+PLATFORM_PORTFOLIO_FILE_PATH = "C:\\autotrader\\data\\order\\platform_portfolio.csv";
+
+/*
+* Parameters for strategy.
+*/
+
+//AT_RESET_ORDERNUM = ParamList("Reset Order Number", "YES|NO", 1);
+
+AT_SYMBOL = ParamStr("Order symbol", "CRUDEOILM19JUNFUT");
+AT_QUANTITY = Param("Order quantity (lot size)", 1, 0, 300000, 10);
+AT_EXCHANGE = ParamList("Order exchange", "MCX|NFO|BSE|BFO|NSE|CDS|NCDEX|NCD|BCD");
+AT_INSTRUMENT = ParamList("Order instrument", "FUTCOM|EQ|FUTIDX|OPTIDX|FUTSTK|OPTSTK|FUTCUR|OPTCUR|FUTCOM|OPTCOM");
+AT_PRODUCT_TYPE = ParamList("Order product type", "INTRADAY|DELIVERY|NORMAL");
+AT_ORDER_TYPE = ParamList("Order order type", "MARKET|LIMIT|STOP_LOSS|SL_MARKET");
+
+// expiry date (Example: 28-DEC-2017), pass NA if not applicable
+AT_EXPIRY = ParamStr( "Order expiry", AT_NA);
+AT_OPTION_TYPE = ParamList("Order option type", "NA|CE|PE");
+AT_STRIKE_PRICE = Param("Order strike price", 0, 0, 50000, 100);
+
+// Square off time
+AT_SQUARE_OFF_FLAG = ParamToggle("Intraday Auto Square-off", "OFF|ON", 0);
+AT_SQUARE_OFF_TIME = ParamTime( "Intraday Square-off Time", "15:15:00"); 
+AT_SQUARE_OFF_STATUS_KEY = "AT_SQUARE_OFF_STATUS";
+
+AT_PRICE_PRECISION = StrToNum(ParamList("Price precision, used for rounding price", "4|3|2|1|0"));
+
+AT_DEBUG = ParamToggle("Print Additional Logs", "OFF|ON", 0);
+
+//globalNum = IIf (Nz(StaticVarGet("globalOrderNum")) == 0, 1, Nz(StaticVarGet("globalOrderNum")));
+//AT_GLOBAL_ORDERNUM = Param("Order Number", globalNum, 1, 100, 1);
+
+/*
+* Used for avoiding repeat orders. Repeat orders are back to back buy or sell orders.
+* The system will not accept an order in this many seconds, if an order for same stock, tradeType was sent earlier from the same chart.
+* If you want to execute back to back order then you can set this parameter to 0.
+* If you want to avoid repeat orders generated due to duplicate or multiple signals then set this parameter to a value higher than your candle interval.
+* Example: 
+* 1. Assume AT_AVOID_REPEAT_ORDER_DELAY value is set for 120 seconds & your chart uses 1-minute (60 seconds) candle.
+* 2. System receives a BUY order for SBIN at time 10:15:15.
+* 3. System will place it.
+* 4. After 15 seconds, system receives another BUY order for SBIN at time 10:15:30.
+* 5. The system will NOT place this order, as the symbol & tradeType are same and the order came with 120 seconds of previous order.
+*/
+AT_AVOID_REPEAT_ORDER_DELAY = Param("Avoid repeat orders (in seconds)", 26000, 0, 26000, 5);
+
+/*
+* First trade type of the day. This is useful, if you want to start your day specifically with a BUY OR SELL trade.
+*/
+AT_FIRST_ORDER_TRADE_TYPE = ParamStr("First order trade type, enter BUY or SELL", AT_NA);
+/*
+if (AT_RESET_ORDERNUM == "YES") {
+	AT_RESET_ORDERNUM = "NO";
+	StaticVarSet( "globalOrderNum", 1);
+}
+*/
+
+/*
+* Initialize static variable
+*/
+if( Nz( StaticVarGet("InitializationDone") ) == 0 )
+{
+	StaticVarSet("InitializationDone", 1);
+	
+	// One time initialization	
+	StaticVarSet( "globalOrderNum", 1);
+	
+	startTime = NumToStr(Now(5), 1.0, False);
+	StaticVarSetText( "globalStartTime", startTime);
+	
+	StaticVarSetText( "HikenBuyOrSell", "");
+	StaticVarSetText( "KrishnaBuyOrSell", "");
+}
+
+function numToStrPlain(num) {
+	return NumToStr(num, 1.0, False);
+}
+
+/*
+* Functions for static variables.
+*/
+global staticVarKey;
+staticVarKey = Name() + numToStrPlain(GetChartID());
+
+/**
+* Stores numeric value in static variable by preparing a unique chart specific key.
+*/
+procedure atStaticVarSet( Key, Value )
+{
+	global staticVarKey;
+	StaticVarSet(Key+staticVarKey, Value);
+}
+
+/**
+* Retrieves numeric data stored in static variable using a unique chart specific key.
+*/
+function atStaticVarGet( Key )
+{
+	global staticVarKey;
+	if( IsNull( Var = StaticVarGet(Key+staticVarKey) ) ) Var = 0;;
+	return Var;
+}
+
+/**
+* Stores text value in static variables by preparing a unique chart specific key.
+*/
+procedure atStaticVarSetText( Key, Value )
+{
+	global staticVarKey;
+	StaticVarSetText(Key+staticVarKey, Value);
+}
+
+/**
+* Retrieves numeric data stored in static variable using a unique chart specific key.
+*/
+function atStaticVarGetText( Key )
+{
+	global staticVarKey;
+	return StaticVarGetText(Key+staticVarKey);
+}
+
+/*
+* Order number for orders.
+*/
+function getNextOrderNum() {
+	num = StaticVarGet( "globalOrderNum");
+	StaticVarSet( "globalOrderNum", num + 1);
+	return num;
+}
+
+/*
+* Saves last order time, in a static variable.
+*/
+function saveLastOrderTime(orderTime) {
+	atStaticVarSet(AT_LAST_ORDER_TIME_KEY, orderTime);
+	return orderTime;
+}
+
+/*
+* Fetches the last order time (if available).
+*/
+function readLastOrderTime() {
+	return atStaticVarGet(AT_LAST_ORDER_TIME_KEY);	
+}
+
+/*
+* Saves last order trade type, in a static variable.
+*/
+function saveLastOrderTradeType(tradeType) {
+	atStaticVarSetText(AT_LAST_ORDER_TRADE_TYPE_KEY, StrToUpper(tradeType));
+	return tradeType;
+}
+
+/*
+* Fetches the last order trade type (if available).
+*/
+function readLastOrderTradeType() {
+	return atStaticVarGetText(AT_LAST_ORDER_TRADE_TYPE_KEY);
+}
+
+/*
+* Order number for id.
+*/
+function getNextOrderId() {
+	return StaticVarGetText("globalStartTime") + "-" + numToStrPlain(getNextOrderNum());
+}
+
+/*
+* Writes a given line along with newline character.
+*/
+function writeLine( filePath, mode, shared, line )
+{
+	for( i = 1; i < AT_LINE_RETRY_COUNT; i++ ) {
+		fh = fopen(filePath, mode, shared);
+		if (fh) {
+			fputs( line + "\n", fh );
+			fclose( fh );
+			break;
+		} else {
+			_TRACE("[Try: " + i + "] Failed to write line: " + line);
+		}
+	}
+}
+
+/*
+* Writes a given line along with newline character.
+*/
+function write( line )
+{
+	writeLine(ORDER_FILE_PATH, AT_FILE_MODE, AT_FILE_SHARE, line);
+}
+
+function sleep(millis) {
+	write(AT_SLEEP_CMD + AT_FIELD_SEPARATOR + millis);
+}
+
+function convertDateTimeToMillisSinceEpoch(dt) {
+	epoch = StrToDateTime("1970-01-01 00:00:00");
+	return DateTimeDiff( dt, epoch );
+}
+
+function convertMillisToDateTimeSinceEpoch(millis) {
+	epoch = StrToDateTime("1970-01-01 00:00:00");
+	amount = millis / 1000;
+	amount += AT_TIMEZONE_INDIA;
+	return DateTimeAdd( epoch, amount, in1Second );
+}
+
+function orderString(symbol, tradeType, orderType, quantity, price) {
+	return symbol + "|" + tradeType + "|" + orderType + "|" + quantity + "@" + price;
+}
+
+function defaultTraderType() {
+	return "CLI";
+}
+
+function defaultValidity() {
+	return "DAY";
+}
+
+function defaultOptionType() {
+	return AT_NA;
+}
+
+function defaultExpiry() {
+	return AT_NA;
+}
+
+function defaultClientId() {
+	return AT_NA;
+}
+
+function defaultExchange() {
+	return AT_NA;
+}
+
+function defaultInstrument() {
+	return "EQ";
+}
+
+function defaultStrikePrice() {
+	return 0;
+}
+
+function defaultDisclosedQuantity() {
+	return 0;
+}
+
+function defaultTriggerPrice() {
+	return 0;
+}
+
+function defaultMarketProtectionPct() {
+	return 0;
+}
+
+function defaultStrategyId() {
+	return -1;
+}
+
+function defaultComments() {
+	return AT_BLANK;
+}
+
+function defaultVariety() {
+	return "regular";
+}
+
+/*
+* Reverses trade type, return BUY for SELL an vice versa.
+*/
+function reverseTradeType(tradeType) {
+	result = "";
+	
+	if(tradeType == "SELL") {
+		result = "BUY";
+	}
+	if(tradeType == "BUY") {
+		result = "SELL";
+	}
+	if(tradeType == "SHORT") {
+		result = "COVER";
+	}
+	if(tradeType == "COVER") {
+		result = "SHORT";
+	}
+	
+	return result;
+}
+
+/*
+* Calculates square off order tradeType based on net open quantity.
+* If net quantity is positive, then it returns SELL. 
+* If net quantity is negative, then it returns BUY.
+* If net quantity is zero, then it returns blank. 
+*/
+function calcSquareOffOrderTradeType(net) {
+	tradeType = "";
+	if(net == 0) {
+		_TRACE("Error: Square off trade type cannot be calculated when net quantity is zero.");
+	} else {
+		if(net > 0) {
+			tradeType = "SELL";			
+		} else {
+			tradeType = "BUY";		
+		}
+	}
+	
+	return tradeType;
+}
+
+/*
+* Returns 1 if the order is the first of the day for the current chart.
+*/
+function isFirstOrder() {
+	lastTradeType = readLastOrderTradeType();
+	result = 0;
+	if(lastTradeType == "") {
+		result = 1;
+	}
+	return result;
+	//return 0; // if this is the first order
+}
+
+function resetFirstOrder() {
+	atStaticVarSetText(AT_LAST_ORDER_TRADE_TYPE_KEY, ""); 
+}
+
+/*
+* We double the quantity if order is not first, so that we can square off earlier position
+* and enter into a new position.
+*/
+function calcDoubleQuantity(quantity) {
+	qty = quantity;
+	if(isFirstOrder() == 0) {
+		qty = quantity * 2;
+	}
+	return qty;
+}
+
+function shouldSquareOff() {
+	result = 0;
+	
+	if((AT_SQUARE_OFF_FLAG == 1) AND (Now(4) > AT_SQUARE_OFF_TIME)) {
+		result = 1;
+	}
+	
+	return result;
+}
+
+/**
+* If certain fields are not applicable then pass following values.
+* orderType = NA
+* quantity = -1
+* price = -1
+* triggerPrice = -1
+*/
+function modifyOrder(orderId, orderType, quantity, price, triggerPrice) {
+	priceStr = StrFormat("%.5f", prec(price, AT_PRICE_PRECISION));
+	triggerPriceStr = StrFormat("%.5f", prec(triggerPrice, AT_PRICE_PRECISION));
+	
+	line = AT_MODIFY_ORDER_CMD + AT_FIELD_SEPARATOR + orderId + AT_FIELD_SEPARATOR +
+		orderType + AT_FIELD_SEPARATOR + quantity + AT_FIELD_SEPARATOR + 
+		priceStr + AT_FIELD_SEPARATOR + triggerPriceStr;	
+	_TRACE("Sending order modify request: " + line);
+	write(line);
+}
+
+function modifyOrderPrice(orderId, price) {
+	modifyOrder(orderId, AT_NA, -1, price, -1);
+}
+
+function modifyOrderQuantity(orderId, quantity) {
+	modifyOrder(orderId, AT_NA, quantity, -1, -1);
+}
+
+function validateOrderEntry(symbol, tradeType, orderType, quantity, price) {
+	valid = 1;
+	time = readLastOrderTime();
+	lastTradeType = readLastOrderTradeType();
+	orderStr = orderString(symbol, tradeType, orderType, quantity, price);	
+	
+	if((valid == 1) AND (shouldSquareOff() == 1)) {
+		_TRACE("Square-off time has passed. Square-off time = " + DateTimeToStr(AT_SQUARE_OFF_TIME));
+		valid = 0;
+	}
+	
+	if((valid == 1) AND (time > 0)) {
+		difference = DateTimeDiff(Now(5), time);
+		
+		if(difference < AT_AVOID_REPEAT_ORDER_DELAY AND lastTradeType == StrToUpper(tradeType)) {
+		
+			_TRACE("Last order time is = " + DateTimeToStr(time));
+			_TRACE("Difference in seconds = " + difference + ", AT_AVOID_REPEAT_ORDER_DELAY = " + AT_AVOID_REPEAT_ORDER_DELAY);
+			_TRACE("Last Trade Type = " + lastTradeType + ", Trade Type = " + tradeType);
+			_TRACE("Skipped repeat order: (" + orderStr + ") Previous " + lastTradeType + " order was sent " + difference + " seconds ago.");
+			valid = 0;
+		}
+	}
+	
+	if((valid == 1) AND (lastTradeType == "")) {		
+		if(AT_FIRST_ORDER_TRADE_TYPE == "BUY" OR AT_FIRST_ORDER_TRADE_TYPE == "SELL") {
+			if(AT_FIRST_ORDER_TRADE_TYPE != tradeType) {
+				_TRACE("Last trade type is null.");
+				_TRACE("Trade type = " + tradeType + ", AT_FIRST_ORDER_TRADE_TYPE = " + AT_FIRST_ORDER_TRADE_TYPE);
+				_TRACE("Skipped first order: (" + orderStr + ") First order trade type set to " + AT_FIRST_ORDER_TRADE_TYPE);
+				valid = 0;
+			}
+		}	
+	}
+	
+	return valid;
+}
+
+
+/*
+* The inputs accepted by placeOrder functions are as follows: 
+* 
+* symbol: It could be a stock symbol or a key which can be mapped to a stock/future/option contract in Mapping menu on AutoTrader.
+* tradeType: BUY, SELL, SHORT, COVER
+* productType: INTRADAY, DELIVERY, NORMAL
+* orderType: LIMIT, MARKET, STOP_LOSS
+* quantity: quantity
+* disclosedQuantity: disclosed quantity, pass zero 0 if not applicable
+* price: order price
+* triggerPrice: trigger price (Used for stop loss order, in other cases pass zero 0)
+* exchange: NSE, NFO, BSE (Maps to exchange column on NEST terminal)
+* instrument: EQ, FUTIDX, FUTSTK, OPTIDX, OPTSTK, FUTCUR, OPTCUR  (Maps to instrument column on NEST terminal)
+* optionType: CE, PE (Option type, pass AT_NA if not applicable)
+* strikePrice: strike price, pass zero 0 if not applicable
+* expiry: expiry date (Example: 29-DEC-2017), pass AT_NA if not applicable
+* clientId: NEST/NOW client id, pass AT_NA if not applicable
+* validity: DAY, GTD, GTC, IOC (pass DAY if not applicable)
+* traderType: PRO, CLI (pass CLI if not applicable)
+* marketProtectionPct: market protection percentage (Only applicable for Market orders, example 3.0 (which means 3% protection)), pass 0 if not applicable
+* strategyId: Id of the strategy which should manage this order, pass -1 if not applicable
+* comments: Comments for this order, pass AT_NA if not applicable
+* variety: Order variety (Regular Order, Bracket Order, Cover Order). Valid values: (regular|bo|co)
+* target: Target for bracket order (pass 0 if not applicable)
+* stoploss: Stoploss for bracket order (pass 0 if not applicable)
+* trailingStoploss: Trailing Stoploss for bracket order (pass 0 if not applicable)
+*/
+
+
+function placeOrderRAW(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments, 
+	variety, target, stoploss, trailingStoploss) {
+
+	qty = int(quantity);
+	orderStr = orderString(symbol, tradeType, orderType, qty, price);			
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderRAW: " + orderStr);
+	}
+	
+	id = getNextOrderId();
+	publishTime = numToStrPlain(convertDateTimeToMillisSinceEpoch(LastValue(DateTime())));
+	priceStr = StrFormat("%.5f", prec(IIF( price < 0, 0, price ), AT_PRICE_PRECISION));
+	triggerPriceStr = StrFormat("%.5f", prec(IIF( triggerPrice < 0, 0, triggerPrice ), AT_PRICE_PRECISION));
+	strikePriceStr = StrFormat("%.5f", IIF( strikePrice < 0, 0, strikePrice ));
+	marketProtectionPctStr = StrFormat("%.2f", marketProtectionPct);
+	targetStr = StrFormat("%.5f", prec(IIF( target < 0, 0, target ), AT_PRICE_PRECISION));
+	stoplossStr = StrFormat("%.5f", prec(IIF( stoploss < 0, 0, stoploss ), AT_PRICE_PRECISION));
+	trailingStoplossStr = StrFormat("%.5f", prec(IIF( trailingStoploss < 0, 0, trailingStoploss ), AT_PRICE_PRECISION));
+	// Handling for a comma in comments
+	commentsStr = StrReplace(comments, AT_FIELD_SEPARATOR, ";" );
+	
+	line = AT_PLACE_ORDER_CMD + AT_FIELD_SEPARATOR + id + AT_FIELD_SEPARATOR + symbol 
+		+ AT_FIELD_SEPARATOR + tradeType + AT_FIELD_SEPARATOR + productType + AT_FIELD_SEPARATOR 
+		+ orderType + AT_FIELD_SEPARATOR + qty + AT_FIELD_SEPARATOR + priceStr + AT_FIELD_SEPARATOR 
+		+ triggerPriceStr + AT_FIELD_SEPARATOR + disclosedQuantity + AT_FIELD_SEPARATOR 
+		+ exchange + AT_FIELD_SEPARATOR + instrument + AT_FIELD_SEPARATOR + optionType 
+		+ AT_FIELD_SEPARATOR + strikePriceStr + AT_FIELD_SEPARATOR + expiry + AT_FIELD_SEPARATOR 
+		+ clientId + AT_FIELD_SEPARATOR + validity + AT_FIELD_SEPARATOR + traderType + AT_FIELD_SEPARATOR 
+		+ marketProtectionPctStr + AT_FIELD_SEPARATOR + strategyId + AT_FIELD_SEPARATOR 
+		+ publishTime + AT_FIELD_SEPARATOR + commentsStr + AT_FIELD_SEPARATOR + variety 
+		+ AT_FIELD_SEPARATOR + targetStr + AT_FIELD_SEPARATOR + stoplossStr + AT_FIELD_SEPARATOR + trailingStoplossStr;
+
+	if(AT_DEBUG == 1) {
+		_TRACE("Order csv: " + line);
+	}
+	
+	write( line );
+	
+	_TRACE("Order placed: [" + orderStr + "], order id: " + id);
+	
+	// Save last order details
+	saveLastOrderTradeType(tradeType);
+	saveLastOrderTime(Now(5));
+
+	return id;
+}
+
+function placeOrderWithoutValidation(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments) {
+
+	return placeOrderRAW(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments, defaultVariety(), 0, 0, 0);
+}
+
+/*
+* Place an order & returns unique order id. This function allows you provide many parameters.
+* It will check whether symbol has a mapping in the system.
+* If a mapping is found, parameters from the mapping are used; otherwise default parameters are used.
+*/
+function placeOrderAdvancedNew(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments, 
+	variety, target, stoploss, trailingStoploss) {
+
+	place = validateOrderEntry(symbol, tradeType, orderType, quantity, price);
+	orderStr = orderString(symbol, tradeType, orderType, quantity, price);	
+
+	id = "";
+	if(place == 1) {
+		id = placeOrderRAW(exchange, instrument, symbol, tradeType, productType, orderType, 
+			quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+			clientId, validity, traderType, marketProtectionPct, strategyId, comments, 
+			variety, target, stoploss, trailingStoploss);
+	} else {
+		_TRACE("Order skipped as it failed validation: " + orderStr);	
+	}
+	
+	return id;
+}
+
+/*
+* Place an order & returns unique order id. This function allows you provide many parameters.
+* It will check whether symbol has a mapping in the system.
+* If a mapping is found, parameters from the mapping are used; otherwise default parameters are used.
+*/
+function placeOrderAdvanced(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments) {
+	
+	return placeOrderAdvancedNew(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+	clientId, validity, traderType, marketProtectionPct, strategyId, comments, 
+	defaultVariety(), 0, 0, 0);
+}
+
+/*
+* Place an order for multiple clients. Useful for Dealer terminals.
+* Enter your clients id on each line in the passed file (one client id per line).
+*/
+function placeOrderAdvancedMultiClient(clientsFile, exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry) {
+
+	place = validateOrderEntry(symbol, tradeType, orderType, quantity, price);
+	orderStr = orderString(symbol, tradeType, orderType, quantity, price);	
+
+	if(place == 1) {
+		fh = fopen( clientsFile, "r" );
+		
+		if( fh )
+		{
+			for( i = 0; ! feof( fh ) AND i < 100000; i++ ) 
+			{
+				// read a line of text
+				line = fgets( fh ); 
+
+				if( line == "" OR StrLen(StrTrim( line, " ,\r\n")) == 0)
+				{
+					break;
+				}
+				
+				clientId = StrTrim(line, " ,\r\n");
+				
+				placeOrderWithoutValidation(exchange, instrument, symbol, tradeType, productType, orderType, 
+					quantity, price, triggerPrice, disclosedQuantity, optionType, strikePrice, expiry, 
+					clientId, defaultValidity(), defaultTraderType(), defaultMarketProtectionPct(), 
+					defaultStrategyId(), defaultComments());
+				
+			}
+			
+			fclose( fh );
+		}		
+	} else {
+		_TRACE("Order skipped as it failed validation: " + orderStr);	
+	}
+
+}
+
+/*
+* Places an order.
+* See documentation above for parameter values.
+*/
+function placeOrder(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, optionType, strikePrice, expiry) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrder");
+	}
+		
+	return placeOrderAdvanced(exchange, instrument, symbol, tradeType, productType, orderType, 
+		quantity, price, triggerPrice, defaultDisclosedQuantity(), optionType, 
+		strikePrice, expiry, defaultClientId(), defaultValidity(), defaultTraderType(), 
+		defaultMarketProtectionPct(), defaultStrategyId(), defaultComments());	
+}
+
+/*
+* Places an order using parameters defined on the chart.
+* See documentation above for parameter values.
+*/
+function placeOrderShort(exchange, symbol, tradeType, orderType, quantity, price, 
+		triggerPrice, variety, target, stoploss, trailingStoploss, validate) {
+	id = "";
+	
+	if(validate == 1) {
+		id = placeOrderAdvancedNew(exchange, AT_INSTRUMENT, symbol, tradeType, AT_PRODUCT_TYPE, orderType, 
+				quantity, price, triggerPrice, defaultDisclosedQuantity(), AT_OPTION_TYPE, 
+				AT_STRIKE_PRICE, AT_EXPIRY, defaultClientId(), defaultValidity(), defaultTraderType(), 
+				defaultMarketProtectionPct(), defaultStrategyId(), defaultComments(),
+				variety, target, stoploss, trailingStoploss);	
+	} else {
+		id = placeOrderRAW(exchange, AT_INSTRUMENT, symbol, tradeType, AT_PRODUCT_TYPE, orderType, 
+				quantity, price, triggerPrice, defaultDisclosedQuantity(), AT_OPTION_TYPE, 
+				AT_STRIKE_PRICE, AT_EXPIRY, defaultClientId(), defaultValidity(), defaultTraderType(), 
+				defaultMarketProtectionPct(), defaultStrategyId(), defaultComments(),
+				variety, target, stoploss, trailingStoploss);
+	}
+	
+	return id;	
+}
+
+/*
+* Places a LIMIT bracket order using parameters defined on the chart.
+* See documentation above for parameter values.
+*/
+function placeBracketOrder(exchange, symbol, tradeType, quantity, price, target, stoploss, trailingStoploss, validate) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeBracketOrder");
+	}
+	return placeOrderShort(exchange, symbol, tradeType, "LIMIT", quantity, price, defaultTriggerPrice(), "bo", 
+		target, stoploss, trailingStoploss, validate);
+}
+
+/*
+* Places a STOPLOSS bracket order using parameters defined on the chart.
+* See documentation above for parameter values.
+*/
+function placeStoplossBracketOrder(exchange, symbol, tradeType, quantity, price, triggerPrice, target, stoploss, trailingStoploss, validate) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeStoplossBracketOrder");
+	}
+	return placeOrderShort(exchange, symbol, tradeType, "STOP_LOSS", quantity, price, triggerPrice, "bo", 
+		target, stoploss, trailingStoploss, validate);
+}
+
+
+/*
+* Places a cover order using parameters defined on the chart.
+* See documentation above for parameter values.
+*/
+function placeCoverOrder(exchange, symbol, tradeType, quantity, triggerPrice, validate) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeCoverOrder");
+	}
+	return placeOrderShort(exchange, symbol, tradeType, "MARKET", quantity, 0, triggerPrice, "co", 0, 0, 0, validate);	
+}
+
+/*
+* Places an order using parameters defined on the chart.
+* See documentation above for parameter values.
+*/
+function placeOrderUsingParams(exchange, symbol, tradeType, orderType, quantity, price, triggerPrice, validate) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderUsingParams");
+	}
+	return placeOrderShort(exchange, symbol, tradeType, orderType, quantity, price, triggerPrice, defaultVariety(), 
+		0, 0, 0, validate);
+}
+
+/*
+* Places an order using mapping & returns unique order id.
+* See documentation above for parameter values.
+*/
+function placeOrderMappedSymbol(symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderMappedSymbol");
+	}
+
+	return placeOrderAdvanced(defaultExchange(), defaultInstrument(), symbol, tradeType, productType, orderType, 
+		quantity, price, triggerPrice, disclosedQuantity, defaultOptionType(), defaultStrikePrice(), 
+		defaultExpiry(), defaultClientId(), defaultValidity(), defaultTraderType(), 
+		defaultMarketProtectionPct(), defaultStrategyId(), defaultComments());
+}
+
+/*
+* Places an order for a stock & returns unique order id.
+* See documentation above for parameter values.
+*/
+function placeOrderStock(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, disclosedQuantity, strategyId, comments) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderStock");
+	}
+
+	return placeOrderAdvanced(exchange, instrument, symbol, tradeType, productType, orderType, 
+		quantity, price, triggerPrice, disclosedQuantity, defaultOptionType(), defaultStrikePrice(), 
+		defaultExpiry(), defaultClientId(), defaultValidity(), defaultTraderType(), 
+		defaultMarketProtectionPct(), strategyId, comments);
+}
+
+/*
+* Places an order for a future contract & returns unique order id.
+* See documentation above for parameter values.
+*/
+function placeOrderFuture(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, expiry, strategyId, comments) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderFuture");
+	}
+
+	return placeOrderAdvanced(exchange, instrument, symbol, tradeType, productType, orderType, 
+		quantity, price, triggerPrice, defaultDisclosedQuantity(), defaultOptionType(), defaultStrikePrice(), 
+		expiry, defaultClientId(), defaultValidity(), defaultTraderType(), 
+		defaultMarketProtectionPct(), strategyId, comments);
+}
+
+/*
+* Places an order for a option contract & returns unique order id.
+* See documentation above for parameter values.
+*/
+function placeOrderOption(exchange, instrument, symbol, tradeType, productType, orderType, 
+	quantity, price, triggerPrice, optionType, strikePrice, expiry, strategyId, comments) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside placeOrderOption");
+	}
+
+	return placeOrderAdvanced(exchange, instrument, symbol, tradeType, productType, orderType, 
+		quantity, price, triggerPrice, defaultDisclosedQuantity(), optionType, strikePrice, 
+		expiry, defaultClientId(), defaultValidity(), defaultTraderType(), 
+		defaultMarketProtectionPct(), strategyId, comments);
+}
+
+/*
+* Cancels the order. Pass the order id.
+*/
+function cancelOrder(id) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside cancelOrder, order id = " + id);
+	}
+
+	line = AT_CANCEL_ORDER_CMD + AT_FIELD_SEPARATOR + id;
+	write( line );
+	return id;
+}
+
+/*
+* Cancels the children orders. This function is useful for exiting from bracket and cover order.
+* Pass the id you received after placing a bracket or cover order.
+*/
+function cancelOrderChildren(id) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside cancelOrderChildren, order id = " + id);
+	}
+
+	line = AT_CANCEL_CHILD_ORDER_CMD + AT_FIELD_SEPARATOR + id;
+	write( line );
+	return id;
+}
+
+
+/*
+* Cancels or exits from order. This function is useful for exiting from bracket and cover order.
+* Pass the id you received after placing a bracket or cover order.
+*/
+function cancelOrExitOrder(id) {
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside cancelOrExitOrder, order id = " + id);
+	}
+
+	// Cancel the Bracket order if it is open
+	cancelOrder(id);
+
+	// Exit from bracket order
+	cancelOrderChildren(id);
+}
+
+/*
+* Cancels the order after given seconds have passed from current time.
+* id - Order id
+* cancelInSeconds - Once given number of seconds pass & if the order statuc is
+*					open, then it will be automatically cancelled by AutoTrader
+*/
+function cancelOrderInSeconds(id, cancelInSeconds) {
+	seconds = numToStrPlain(cancelInSeconds);
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside cancelOrderInSeconds, order id = " + id + ", seconds = " + seconds);
+	}
+
+	line = AT_CANCEL_ORDER_SECS_CMD + AT_FIELD_SEPARATOR + id + AT_FIELD_SEPARATOR + seconds;
+	write( line );
+	return id;
+}
+
+/*
+* Cancels the order after at given time (if it is open).
+* id - Order id
+* hh - the hours between 0-23
+* mm - the minutes between 0-59
+* ss - the seconds between 0-59
+*/
+function cancelOrderAtTime(id, hh, mm, ss) {
+	time = numToStrPlain(hh) + ":" + numToStrPlain(mm) + ":" + numToStrPlain(ss);
+	if(AT_DEBUG == 1) {
+		_TRACE("Inside cancelOrderAtTime, order id = " + id + ", time = " + time);
+	}
+
+	line = AT_CANCEL_ORDER_TIME_CMD + AT_FIELD_SEPARATOR + id + AT_FIELD_SEPARATOR + time;
+	write( line );
+	return id;
+}
+
+/*
+* Reads column value by identifying row by the given id.
+*/
+function readColumnById(filePath, id, columnIndex) {
+	fh = fopen( filePath, "r" );
+	result = "";
+	
+	if( fh )
+	{
+		for( i = 0; ! feof( fh ) AND i < 100000; i++ ) 
+		{
+			// read a line of text
+			line = fgets( fh ); 
+
+			if( line == "" )
+			{
+				break;
+			}
+			
+			if(id == StrExtract( line, 0 )) {
+				result = StrExtract( line, columnIndex );
+				break;
+			}
+		}
+		
+		fclose( fh );
+	}
+	
+	return result;
+}
+
+/*
+* Reads column value in a single row file.
+*/
+function readColumn(filePath, columnIndex) {
+	fh = fopen( filePath, "r" );
+	result = "";
+	
+	if( fh )
+	{
+		for( i = 0; ! feof( fh ) AND i < 10; i++ ) 
+		{
+			// read a line of text
+			line = fgets( fh ); 
+
+			if( line == "" )
+			{
+				break;
+			}
+			
+			result = StrExtract( line, columnIndex );
+			break;
+		}
+		
+		fclose( fh );
+	}
+	
+	return result;
+}
+
+/*
+* Read platform order details.
+*/
+function readOrderColumn(id, columnIndex) {
+	return readColumnById(PLATFORM_ORDERS_FILE_PATH, id, columnIndex);
+}
+
+/*
+* Read platform position details.
+*/
+function readPositionColumn(id, columnIndex) {
+	return readColumnById(PLATFORM_POSITIONS_FILE_PATH, id, columnIndex);
+}
+
+/*
+* Read platform portfolio details.
+*/
+function readPortfolioColumn(columnIndex) {
+	return readColumn(PLATFORM_PORTFOLIO_FILE_PATH, columnIndex);
+}
+
+/*
+* Read margin details.
+*/
+function readMarginColumn(category, columnIndex) {
+	return readColumnById(MARGIN_FILE_PATH, category, columnIndex);
+}
+
+/*****************************************************************************
+* ORDER DETAILS FUNCTIONS
+*****************************************************************************/
+
+/*
+* Get order status.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderStatus(id) {
+	return readOrderColumn(id, 2);
+}
+
+/*
+* Get order quantity.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderQty(id) {
+	return StrToNum(readOrderColumn(id, 3));
+}
+
+/*
+* Get order pending quantity.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderPendingQty(id) {
+	return StrToNum(readOrderColumn(id, 4));
+}
+
+/*
+* Get order filled quantity.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderFilledQty(id) {
+	return StrToNum(readOrderColumn(id, 5));
+}
+
+/*
+* Get order average price.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderAveragePrice(id) {
+	return StrToNum(readOrderColumn(id, 6));
+}
+
+/*
+* Get order timestamp.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderTimestamp(id) {
+	return convertMillisToDateTimeSinceEpoch(StrToNum(readOrderColumn(id, 7)));
+}
+
+/*
+* Get order platform (UPSTOX, NEST, NOW, KITE, ODIN) id.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderPlatformId(id) {
+	return readOrderColumn(id, 1);
+}
+
+/*
+* Get order's order type.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderOrderType(id) {
+	return readOrderColumn(id, 8);
+}
+
+/*
+* Get order's product type.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderProductType(id) {
+	return readOrderColumn(id, 9);
+}
+
+/*
+* Get order's variety.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderVariety(id) {
+	return readOrderColumn(id, 10);
+}
+
+/*
+* Get order's parent order id. The child orders generated by BO & CO orders will have parent id.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderParentId(id) {
+	return readOrderColumn(id, 11);
+}
+
+/*
+* Get order's exchange.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderExchange(id) {
+	return readOrderColumn(id, 12);
+}
+
+/*
+* Get order's trading symbol.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderTradingSymbol(id) {
+	return readOrderColumn(id, 13);
+}
+
+/*
+* Get order's status message or rejection reason.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderStatusMessage(id) {
+	return readOrderColumn(id, 14);
+}
+
+/*
+* Get order price.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function getOrderPrice(id) {
+	return StrToNum(readOrderColumn(id, 15));
+}
+
+/*
+* Checks whether order is open.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function isOrderOpen(id) {
+	result = 0;
+	oStatus = getOrderStatus(id);
+	
+	if(StrToUpper(oStatus) == "OPEN" OR StrToUpper(oStatus) == "TRIGGER PENDING") {
+		result = 1;
+	}
+	
+	return result;
+}
+
+/*
+* Checks whether order is complete.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function isOrderComplete(id) {
+	result = 0;
+	oStatus = getOrderStatus(id);
+	
+	if(StrToUpper(oStatus) == "COMPLETE") {
+		result = 1;
+	}
+	
+	return result;
+}
+
+/*
+* Checks whether order is rejected.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function isOrderRejected(id) {
+	result = 0;
+	oStatus = getOrderStatus(id);
+	
+	if(StrToUpper(oStatus) == "REJECTED") {
+		result = 1;
+	}
+	
+	return result;
+}
+
+/*
+* Checks whether order is cancelled.
+* id - should be the id returned by placeOrder function when you place an order.
+*/
+function isOrderCancelled(id) {
+	result = 0;
+	oStatus = getOrderStatus(id);
+	
+	if(StrToUpper(oStatus) == "CANCELLED") {
+		result = 1;
+	}
+	
+	return result;
+}
+
+/*****************************************************************************
+* POSITION DETAILS FUNCTIONS
+*****************************************************************************/
+
+/*
+* Get position net quantity.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionNetQty(id) {
+	return StrToNum(readPositionColumn(id, 3));
+}
+
+/*
+* Get position BUY quantity.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionBuyQty(id) {
+	return StrToNum(readPositionColumn(id, 4));
+}
+
+/*
+* Get position SELL quantity.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionSellQty(id) {
+	return StrToNum(readPositionColumn(id, 5));
+}
+
+/*
+* Get position M2M.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionM2M(id) {
+	return StrToNum(readPositionColumn(id, 6));
+}
+
+/*
+* Get position P&L.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionPNL(id) {
+	return StrToNum(readPositionColumn(id, 7));
+}
+
+/*
+* Get position buy price.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionBuyPrice(id) {
+	return StrToNum(readPositionColumn(id, 8));
+}
+
+/*
+* Get position sell price.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionSellPrice(id) {
+	return StrToNum(readPositionColumn(id, 9));
+}
+
+/*
+* Get position buy value.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionBuyValue(id) {
+	return StrToNum(readPositionColumn(id, 10));
+}
+
+/*
+* Get position sell value.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionSellValue(id) {
+	return StrToNum(readPositionColumn(id, 11));
+}
+
+/*
+* Get position net value.
+* id - symbol which uniquely identifies a position
+*/
+function getPositionNetValue(id) {
+	return StrToNum(readPositionColumn(id, 12));
+}
+
+/*****************************************************************************
+* PORTFOLIO FUNCTIONS
+*****************************************************************************/
+
+/*
+* Get portfolio M2M.
+*/
+function getPortfolioM2M() {
+	return StrToNum(readPortfolioColumn(0));
+}
+
+/*
+* Get count of total positions in portfolio.
+*/
+function getPortfolioPositionCount() {
+	return StrToNum(readPortfolioColumn(1));
+}
+
+/*
+* Get count of total orders in portfolio.
+*/
+function getPortfolioOrderCount() {
+	return StrToNum(readPortfolioColumn(2));
+}
+
+/*
+* Get count of total open orders in portfolio.
+*/
+function getPortfolioOpenOrderCount() {
+	return StrToNum(readPortfolioColumn(3));
+}
+
+/*
+* Get count of total completed orders in portfolio.
+*/
+function getPortfolioCompletedOrderCount() {
+	return StrToNum(readPortfolioColumn(4));
+}
+
+/*
+* Get count of total cancelled orders in portfolio.
+*/
+function getPortfolioCancelledOrderCount() {
+	return StrToNum(readPortfolioColumn(5));
+}
+
+/*
+* Get count of total rejected orders in portfolio.
+*/
+function getPortfolioRejectedOrderCount() {
+	return StrToNum(readPortfolioColumn(6));
+}
+
+/*****************************************************************************
+* FUNDS/MARGIN FUNCTIONS
+*****************************************************************************/
+
+/*
+* Get total funds (equities).
+*/
+function getFunds() {
+	return StrToNum(readMarginColumn(AT_MARGIN_EQUITY, 1));
+}
+
+/*
+* Get margin utilized (equities).
+*/
+function getMarginUtilized() {
+	return StrToNum(readMarginColumn(AT_MARGIN_EQUITY, 2));
+}
+
+/*
+* Get margin available (equities).
+*/
+function getMarginAvailable() {
+	return StrToNum(readMarginColumn(AT_MARGIN_EQUITY, 3));
+}
+
+/*
+* Get total funds (commodity).
+*/
+function getFundsCommodity() {
+	return StrToNum(readMarginColumn(AT_MARGIN_COMMODITY, 1));
+}
+
+/*
+* Get margin utilized (commodity).
+*/
+function getMarginUtilizedCommodity() {
+	return StrToNum(readMarginColumn(AT_MARGIN_COMMODITY, 2));
+}
+
+/*
+* Get margin available (commodity).
+*/
+function getMarginAvailableCommodity() {
+	return StrToNum(readMarginColumn(AT_MARGIN_COMMODITY, 3));
+}
+
+/*****************************************************************************
+* UTILITY FUNCTIONS
+*****************************************************************************/
+
+/*
+* Square off position for the given trading symbol.
+* stopTrading - pass 1 to stop trading completely for the current day, otherwise pass 0
+*/
+function squareOffPos(exchange, tradingSymbol, stopTrading) {
+	_TRACE("Square off request sent: " + exchange + "-" + tradingSymbol);
+	write(AT_SQUARE_OFF_POSITION + AT_FIELD_SEPARATOR + exchange + 
+		AT_FIELD_SEPARATOR + tradingSymbol + AT_FIELD_SEPARATOR + stopTrading);
+}
+
+/*
+* Square off position as per chart parameters.
+*/
+function squareOffPosition() {
+	return squareOffPos(AT_EXCHANGE, AT_SYMBOL, 0);
+}
+
+/*
+* Calculates profit order price.
+*/
+function calculateProfitTarget(entryTradeType, entryPrice, profitPct) {
+	result = 0;
+	
+	if(entryTradeType == "BUY" OR entryTradeType == "COVER") {
+		result = entryPrice * (1 + (profitPct / 100));
+	}
+	
+	if(entryTradeType == "SELL" OR entryTradeType == "SHORT") {
+		result = entryPrice * (1 - (profitPct / 100));
+	}
+	
+	return result;	
+}
+
+/*
+* Calculates stoploss order price.
+*/
+function calculateStoplossTarget(entryTradeType, entryPrice, stoplossPct) {
+	result = 0;
+	
+	if(entryTradeType == "BUY" OR entryTradeType == "COVER") {
+		result = entryPrice * (1 - (stoplossPct / 100));
+	}
+	
+	if(entryTradeType == "SELL" OR entryTradeType == "SHORT") {
+		result = entryPrice * (1 + (stoplossPct / 100));
+	}
+	
+	return result;	
+}
+
+/*
+* Reads symbol quantity from quantity file. Useful in scanner.
+* The quantity file should be comma separated file
+* Each row will contain symbol along with quantity
+* Sample format: NIFTY19JUNFUT,75
+*/
+function readQuantityFromFile(filePath, symbol, defaultQty) {
+	quantity = 0;
+	
+	fh = fopen( filePath, "r");
+	if( fh ) { 
+	   	for( i = 0; ! feof( fh ) AND i < 100000; i++ ) 
+		{
+			// read a line of text
+			line = fgets( fh ); 
+
+			if( line == "" OR StrLen(StrTrim( line, " ,\r\n")) == 0)
+			{
+				break;
+			}
+
+			if(symbol == StrExtract( line, 0 )) {
+				quantity = StrToNum(StrExtract( line, 1 ));
+				break;
+			}
+		}
+		
+		fclose( fh );
+	} 
+	else { 
+		_TRACE("Quantity file does not exists at path: " + filePath);
+	} 
+	
+	if(quantity > 0) {
+		_TRACE("Quantity read from file: [" + symbol + ", " + quantity + "]");
+	} else {
+		quantity = defaultQty;
+		_TRACE("Could not find quantity in file for " + symbol 
+			+ ", using default quantity of " + defaultQty);
+	}
+	
+	return quantity;
+}
+
+function QuickOrder(OrderType, Quantity, Price)
+{
+	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, OrderType, AT_ORDER_TYPE, Quantity, Price, defaultTriggerPrice(), 1 );
+}

@@ -1,0 +1,167 @@
+#include <algotrader-util.afl>
+
+
+// developed by amibrokerfans
+_SECTION_BEGIN( "Chart Settings" );
+SetChartOptions( 0, chartShowArrows | chartShowDates );
+SetChartBkColor( ParamColor( "Outer Panel", colorPaleBlue ) );
+SetChartBkGradientFill( ParamColor( "Upper Chart", 1 ), ParamColor( "Lower Chart", 23 ) );
+GraphXSpace = Param( "GraphXSpace", 10, 0, 100, 1 );
+dec = ( Param( "Decimals", 2, 0, 7, 1 ) / 10 ) + 1;
+bi = BarIndex();
+Lbi = LastValue( BarIndex() );
+sbi = SelectedValue( bi );
+x1 = BarCount - 1;
+_SECTION_END();
+_SECTION_BEGIN( "HeikenAshiSmoothed" );
+GraphXSpace = 5;
+p = 6;
+Om = MA( O, p );
+hm = MA( H, p );
+lm = MA( L, p );
+Cm = MA( C, p );
+HACLOSE = ( Om + Hm + Lm + Cm ) / 4;
+HaOpen = AMA( Ref( HaClose, -1 ), 0.5 );
+HaHigh = Max( Hm, Max( HaClose, HaOpen ) );
+HaLow = Min( Lm, Min( HaClose, HaOpen ) );
+PlotOHLC( HaOpen, HaHigh, HaLow, HaClose, "" + Name(), colorBlack, styleCandle | styleNoLabel );
+_SECTION_END();
+_SECTION_BEGIN( "theswing" );
+SetBarsRequired( 200, 0 );
+GraphXSpace = 5;
+SetChartOptions( 0, chartShowArrows | chartShowDates );
+a = 2;
+b = 20;
+HACLOSE = ( O + H + L + C ) / 4;
+HaOpen = AMA( Ref( HaClose, -1 ), 0.5 );
+HaHigh = Max( H, Max( HaClose, HaOpen ) );
+HaLow = Min( L, Min( HaClose, HaOpen ) );
+d = Haclose;
+e = ATR( 14 );
+g = WMA( H - L, b );
+k = a * g;
+m = 1;
+n[0] = 0;
+
+for( i = 1; i < BarCount; i++ )
+{
+    if( m[i - 1] == 1 )
+    {
+        if( d[i] < n[i - 1] )
+        {
+            m[i] = -1;
+            n[i] = d[i] + k[i];
+        }
+        else
+        {
+            m[i] = 1;
+
+            if( ( d[i] - k[i] ) > n[i - 1] )
+            {
+                n[i] = d[i] - k[i];
+            }
+            else
+            {
+                n[i] = n[i - 1];
+            }
+        }
+    }
+
+    if( m[i - 1] == -1 )
+    {
+        if( d[i] > n[i - 1] )
+        {
+            m[i] = 1;
+            n[i] = d[i] - k[i];
+        }
+        else
+        {
+            m[i] = -1;
+
+            if( ( d[i] + k[i] ) < n[i - 1] )
+            {
+                n[i] = d[i] + k[i];
+            }
+            else
+            {
+                n[i] = n[i - 1];
+            }
+        }
+    }
+}
+
+Buy = Cover = Cross( d, n );
+Sell = Short = Cross( n, d );
+SellPrice = ValueWhen( Sell, C, 1 );
+BuyPrice = ValueWhen( Buy, C, 1 );
+Long = Flip( Buy, Sell );
+Shrt = Flip( Sell, Buy );
+_SECTION_END();
+
+//<================================================
+
+//StaticVarRemove("*");
+CONST_PROFIT_POINTS = 10;
+STOPLOSS = 0; 
+#include <orders.afl>
+ProcessTicks();
+
+//=================================================>
+
+
+
+
+
+
+_SECTION_BEGIN( "Title" );
+z = ( GetPerformanceCounter() / 200 ) % 255;
+anim = ColorHSB( ( i + z ) % 256, 155, 250 );
+RequestTimedRefresh( 1 );
+
+if( Status( "action" ) == actionIndicator )
+    (
+        Title = EncodeColor( colorWhite ) + Name() + " - " + EncodeColor( colorRed ) + Interval( 2 ) + EncodeColor( colorWhite ) +
+                " - " + Date() + " - " + "\n" + EncodeColor( colorWhite ) + "Op-" + O + " " + "Hi-" + H + " " + "Lo-" + L + " " +
+                "Cl-" + C + " " + "Vol= " + WriteVal( V ) + "\n" +
+                EncodeColor( colorRed ) +
+                WriteIf( Buy , " GO LONG / Reverse Signal at " + C + " ", "" ) +
+                WriteIf( Sell , " EXIT LONG / Reverse Signal at " + C + " ", "" ) + "\n" + EncodeColor( colorWhite ) +
+                WriteIf( Sell , "Total Profit/Loss for the Last Trade Rs." + ( C - BuyPrice ) + "", "" ) +
+                WriteIf( Buy , "Total Profit/Loss for the Last trade Rs." + ( SellPrice - C ) + "", "" ) +
+                WriteIf( Long AND NOT Buy, "Trade : Long - Entry price Rs." + ( BuyPrice ), "" ) +
+                WriteIf( shrt AND NOT Sell, "Trade : Short - Entry price Rs." + ( SellPrice ), "" ) + "\n" +
+                WriteIf( Long AND NOT Buy, "Current Profit/Loss Rs." + ( C - BuyPrice ) + "", "" ) +
+                WriteIf( shrt AND NOT Sell, "Current Profit/Loss Rs." + ( SellPrice - C ) + "", "" ) );
+
+PlotShapes( IIf( Buy, shapeStar, shapeNone ), colorCustom11, layer = 0, HaLow, offset = -80 );
+PlotShapes( IIf( Buy, shapeSmallCircle, shapeNone ), colorBlue, layer = 0, HaLow, offset = -80 );
+PlotShapes( IIf( Buy, shapeUpArrow, shapeNone ), anim, layer = 0, HaLow, offset = -63 );
+PlotShapes( IIf( Buy, shapeSquare, shapeNone ), colorCustom11, layer = 0, HaLow, offset = -71 );
+PlotShapes( IIf( Sell, shapeStar, shapeNone ), colorYellow, layer = 0, HaHigh, offset = 80 );
+PlotShapes( IIf( Sell, shapeSmallCircle, shapeNone ), colorRed, layer = 0, HaHigh, offset = 80 );
+PlotShapes( IIf( Sell, shapeDownArrow, shapeNone ), anim, layer = 0, HaHigh, offset = -63 );
+PlotShapes( IIf( Sell, shapeSquare, shapeNone ), colorYellow, layer = 0, HaHigh, offset = 71 );
+AlertIf( Buy, "SOUND C:\\Windows\\Media\\tada.wav", "Audio alert", 2 );
+AlertIf( Sell, "SOUND C:\\Windows\\Media\\tada.wav", "Audio alert", 2 );
+
+_SECTION_BEGIN( "Small Triggers" );
+p1 = Param( "TL 1 Periods", 20, 5, 50, 1 );
+p2 = Param( "TL 2 Periods", 5, 3, 25, 1 );
+TL1 = LinearReg( C, p1 );
+TL2 = EMA( TL1, p2 );
+Col1 = IIf( TL1 > TL2, ParamColor( "TL Up Colour", colorBrightGreen ), ParamColor( "TL Dn Colour", colorCustom12 ) );
+ShortTrend = WriteIf( TL1 > TL2, "Uptrend", "Downtrend" );
+Plot( TL1, "LinearReg(20)", Col1, styleLine | styleNoLabel );
+Plot( TL2, "EMA(5)", Col1, styleLine | styleNoLabel ); // | styleThick
+_SECTION_END();
+
+_SECTION_BEGIN( "Large Triggers" );
+p3 = Param( "TL 3 Periods", 80, 5, 100, 1 );
+p4 = Param( "TL 4 Periods", 20, 3, 100, 1 );
+TL3 = LinearReg( C, p3 );
+TL4 = EMA( TL3, p4 );
+Col1 = IIf( TL3 > TL4, ParamColor( "TLL Up Colour", colorBlue ), ParamColor( "TLL Dn Colour", colorRed ) );
+LongTrend = WriteIf( TL3 > TL4, "Uptrend", "Downtrend" );
+Plot( TL3, "LinearReg(80)", Col1, styleLine | styleNoLabel );
+Plot( TL4, "EMA(20)", Col1, styleLine | styleNoLabel );
+_SECTION_END();

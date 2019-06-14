@@ -1,0 +1,9 @@
+Filter=1;
+TimeFrameSet(in1Second);
+AddColumn(O,"Open");
+AddColumn(H,"High");
+AddColumn(L,"Low");
+AddColumn(C,"Close");
+AddColumn(V,"Volume",1.0);
+AddColumn(OI,"Open Interest",1.0);
+

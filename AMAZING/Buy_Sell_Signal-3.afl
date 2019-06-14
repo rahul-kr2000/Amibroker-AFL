@@ -1,0 +1,555 @@
+//--------------------------------------------------------------//
+//  Kenzie SR System - 09/2010
+//  Modified By Kenzie Sebastian (kenziesr@yahoo.co.id)
+//  Shared for milis amibroker-4-bei@yahoogroups.com
+//
+// - fixed the OHLC price not showing issue.
+// - added to plot buy/sell price along with signals.
+// - add filter to scan high volumn stock only.
+// - change color of fonts so that they can be read easily with //   while background.
+//--------------------------------------------------------------
+SetBarsRequired( 800, 0 );
+ 
+GraphXSpace = 7;
+SetChartOptions( 0, chartShowArrows | chartShowDates );
+ 
+// set criteria to scan for big stock only;
+BigStock = MA( V, 10 ) * MA( C, 10 ) > 1000000;
+ 
+//---------------Color------------------------
+per1 = 6;
+per2 = 2;
+Om = MA( O, per1 );
+hm = MA( H, per1 );
+lm = MA( L, per1 );
+Cm = MA( C, per1 );
+ 
+// 1. Heiken Ashi
+HACLOSE = ( Om + Hm + Lm + Cm ) / 4;
+HaOpen = AMA( Ref( HaClose,  -1 ),  0.5 );
+HaHigh = Max( Hm,  Max( HaClose,  HaOpen ) );
+HaLow = Min( Lm,  Min( HaClose,  HaOpen ) );
+ 
+ 
+Of = MA( Haopen, per2 );
+Cf = MA( Haclose, per2 );
+Lf = IIf( haOpen < haClose, MA( Halow, per2 ), MA( Hahigh, per2 ) );
+Hf = IIf( haOpen < haClose, MA( Hahigh, per2 ), MA( Halow, per2 ) );
+//Color = IIf( Cf > Of, colorGreen, colorRed );
+ 
+ 
+//----------------------------------------------------
+ 
+TrailStop = HHV( C - 2 * ATR( 10 ), 15 );
+ProfitTaker = EMA( H, 13 ) + 2 * ATR( 10 );
+ 
+/* **********************************
+Code to automatically identify pivots
+********************************** */
+ 
+// -- what will be our lookback range for the hh and ll?
+farback = 140; //How Far back to go
+nBars = 12; //Number of bars
+ 
+// -- Create 0-initialized arrays the size of barcount
+aHPivs = H - H;
+aLPivs = L - L;
+ 
+// -- More for future use, not necessary for basic plotting
+aHPivHighs = H - H;
+aLPivLows = L - L;
+aHPivIdxs = H - H;
+aLPivIdxs = L - L;
+nHPivs = 0;
+nLPivs = 0;
+lastHPIdx = 0;
+lastLPIdx = 0;
+lastHPH = 0;
+lastLPL = 0;
+curPivBarIdx = 0;
+ 
+// -- looking back from the current bar, how many bars
+// back were the hhv and llv values of the previous
+// n bars, etc.?
+aHHVBars = HHVBars( H, nBars );
+aLLVBars = LLVBars( L, nBars );
+aHHV = HHV( H, nBars );
+aLLV = LLV( L, nBars );
+ 
+// -- Would like to set this up so pivots are calculated back from
+// last visible bar to make it easy to "go back" and see the pivots
+// this code would find. However, the first instance of
+// _Trace output will show a value of 0
+aVisBars = Status( "barvisible" );
+nLastVisBar = LastValue( Highest( IIf( aVisBars, BarIndex(), 0 ) ) );
+_TRACE( "Last visible bar: " + nLastVisBar );
+ 
+// -- Initialize value of curTrend
+curBar = ( BarCount - 1 );
+curTrend = "";
+ 
+if ( aLLVBars[curBar] < aHHVBars[curBar] )
+{
+    curTrend = "D";
+}
+else
+{
+    curTrend = "U";
+}
+ 
+// -- Loop through bars. Search for
+// entirely array-based approach
+// in future version
+for ( i = 0; i < BarCount; i++ )
+{
+    curBar = ( BarCount - 1 ) - i;
+// -- Have we identified a pivot? If trend is down...
+ 
+    if ( aLLVBars[curBar] < aHHVBars[curBar] )
+    {
+// ... and had been up, this is a trend change
+        if ( curTrend == "U" )
+        {
+            curTrend = "D";
+// -- Capture pivot information
+            curPivBarIdx = curBar - aLLVBars[curBar];
+            aLPivs[curPivBarIdx] = 1;
+            aLPivLows[nLPivs] = L[curPivBarIdx];
+            aLPivIdxs[nLPivs] = curPivBarIdx;
+            nLPivs++;
+        }
+ 
+// -- or current trend is up
+    }
+    else
+    {
+        if ( curTrend == "D" )
+        {
+            curTrend = "U";
+            curPivBarIdx = curBar - aHHVBars[curBar];
+            aHPivs[curPivBarIdx] = 1;
+            aHPivHighs[nHPivs] = H[curPivBarIdx];
+            aHPivIdxs[nHPivs] = curPivBarIdx;
+            nHPivs++;
+        }
+ 
+// -- If curTrend is up...else...
+    }
+ 
+// -- loop through bars
+}
+ 
+// -- Basic attempt to add a pivot this logic may have missed
+// -- OK, now I want to look at last two pivots. If the most
+// recent low pivot is after the last high, I could
+// still have a high pivot that I didn't catch
+// -- Start at last bar
+curBar = ( BarCount - 1 );
+ 
+candIdx = 0;
+ 
+candPrc = 0;
+ 
+lastLPIdx = aLPivIdxs[0];
+ 
+lastLPL = aLPivLows[0];
+ 
+lastHPIdx = aHPivIdxs[0];
+ 
+lastHPH = aHPivHighs[0];
+ 
+if ( lastLPIdx > lastHPIdx )
+{
+// -- Bar and price info for candidate pivot
+    candIdx = curBar - aHHVBars[curBar];
+    candPrc = aHHV[curBar];
+ 
+    if (
+        lastHPH < candPrc AND
+        candIdx > lastLPIdx AND
+        candIdx < curBar )
+    {
+// -- OK, we'll add this as a pivot...
+        aHPivs[candIdx] = 1;
+// ...and then rearrange elements in the
+// pivot information arrays
+ 
+        for ( j = 0; j < nHPivs; j++ )
+        {
+            aHPivHighs[nHPivs-j] = aHPivHighs[nHPivs- ( j+1 )];
+            aHPivIdxs[nHPivs-j] = aHPivIdxs[nHPivs-( j+1 )];
+        }
+ 
+        aHPivHighs[0] = candPrc ;
+ 
+        aHPivIdxs[0] = candIdx;
+        nHPivs++;
+    }
+}
+else
+{
+// -- Bar and price info for candidate pivot
+    candIdx = curBar - aLLVBars[curBar];
+    candPrc = aLLV[curBar];
+ 
+    if (
+        lastLPL > candPrc AND
+        candIdx > lastHPIdx AND
+        candIdx < curBar )
+    {
+// -- OK, we'll add this as a pivot...
+        aLPivs[candIdx] = 1;
+// ...and then rearrange elements in the
+// pivot information arrays
+ 
+        for ( j = 0; j < nLPivs; j++ )
+        {
+            aLPivLows[nLPivs-j] = aLPivLows[nLPivs-( j+1 )];
+            aLPivIdxs[nLPivs-j] = aLPivIdxs[nLPivs-( j+1 )];
+        }
+ 
+        aLPivLows[0] = candPrc;
+ 
+        aLPivIdxs[0] = candIdx;
+        nLPivs++;
+    }
+}
+ 
+//============== EXPLORATION ==============
+Buy = Cover = BigStock AND aLPivs == 1;
+ 
+Sell = Short = BigStock AND aHPivs == 1;
+ 
+SellPrice = ValueWhen( Sell, C, 1 );
+ 
+BuyPrice = ValueWhen( Buy, C, 1 );
+ 
+Long = Flip( Buy, Sell );
+ 
+Shrt = Flip( Sell, Buy );
+ 
+//============== Plot price ==============
+n = 15;
+ 
+a =  C > ( MA( H, n ) + MA( L, n ) ) / 2;// then Buy next bar at market;
+ 
+b = C < ( MA( H, n ) + MA( L, n ) ) / 2;// then Sell Short next bar at market;
+ 
+state = IIf( BarsSince( a ) < BarsSince( b ), 1, 0 );
+ 
+Longs = state == 1;
+ 
+shorts = state == 0;
+ 
+//Chart
+Colorbar = IIf( Longs, colorGreen, IIf( Shorts, colorRed, colorGrey40 ) );
+ 
+Plot( C, "Close", colorbar, styleCandle | styleNoTitle );
+ 
+//============== Plot Shape ==============
+PlotShapes( IIf( aHPivs == 1, shapeDownArrow, shapeNone ), colorOrange, 0, High, Offset = -12 );
+ 
+PlotShapes( IIf( aLPivs == 1, shapeUpArrow , shapeNone ), colorLime, 0, Low, Offset = -12 );
+PlotShapes( IIf(Buy, shapeSmallCircle, shapeNone),colorBrightGreen, 0, BuyPrice, 0 );
+PlotShapes( IIf(Sell, shapeSmallCircle, shapeNone),colorRed, 0 ,SellPrice, 0 );
+FirstVisibleBar = Status( "FirstVisibleBar" );
+Lastvisiblebar = Status("LastVisibleBar");
+for( b = Firstvisiblebar; b <= Lastvisiblebar AND b < BarCount; b++)
+{
+if( Buy[b] ) PlotText("\n Buy\n "+NumToStr(BuyPrice[b],1.2),b,BuyPrice[b],colorBrightGreen);
+else if( Sell[b] ) PlotText("\n Sell\n "+NumToStr(SellPrice[b],1.2),b,SellPrice[b],colorRed);
+}
+ 
+//============== EMA(13) ==============
+Plot( EMA( C, 13 ), "", colorBlue, styleLine + styleNoRescale );
+ 
+//============== TRENDING ==============
+DTL = 150; // DTL = Define Trend Long
+ 
+DTM = 70;   // DTM = Define Trend Medium
+ 
+DTS = 14;  // DTS = Define Trend Short
+ 
+TL = LinRegSlope( MA( C, DTL ), 2 );     // TL = Trend Long
+ 
+TM = LinRegSlope( MA( C, DTM ), 2 );  // TM = Trend Medium
+ 
+TS = LinRegSlope( MA( C, DTS ), 2 );  // TS = Trend Short
+ 
+TLL = IIf( LinRegSlope( MA( C, DTL ), 2 ) > 0, True, False );
+ 
+TMM = IIf( LinRegSlope( MA( C, DTM ), 2 ) > 0, True, False );
+ 
+TSS = IIf( LinRegSlope( MA( C, DTS ), 2 ) > 0, True, False );
+ 
+//============== VOLUME ==============
+Vlp = 30; //Volume lookback period
+ 
+Vrg = MA( V, Vlp );
+ 
+St = StDev( Vrg, Vlp );
+ 
+Vp3 = Vrg + 3 * st;
+ 
+Vp2 = Vrg + 2 * st;
+ 
+Vp1 = Vrg + 1 * st;
+ 
+Vn1 = Vrg - 1 * st;
+ 
+Vn2 = Vrg - 2 * st;
+ 
+//============== WILLIAM'S %R ==============
+WR = ( ( HHV( H, 14 ) - C ) / ( HHV ( H, 14 ) - LLV ( L, 14 ) ) ) * -100;
+ 
+//============== A/D ==============
+TRH = IIf( Ref( C, -1 ) > H, Ref( C, -1 ), H );
+ 
+TRL = IIf( Ref( C, -1 ) < L, Ref( C, -1 ), L );
+ 
+ad = IIf( C > Ref( C, -1 ), C - TRL, IIf( C < Ref( C, -1 ), C - TRH, 0 ) );
+ 
+WAD = Cum( ad );
+ 
+wu = wad > Ref( wad, -1 );
+ 
+wd = wad < Ref( wad, -1 );
+ 
+//============== MACD ==============
+MB = Cross ( MACD(), Signal() );
+ 
+MS = Cross( Signal(), MACD() );
+ 
+MB = ExRem( MB, MS );
+ 
+MS = ExRem( MS, MB );
+ 
+MB1 = MACD() > Signal();
+ 
+MS1 = MACD() < Signal();
+ 
+//============== STOCH ==============
+StochKval = StochK( 10, 5 );
+ 
+StochDval = StochD( 10, 5, 5 );
+ 
+StochBuy = Cross( StochK( 10, 5 ), StochD( 10, 5, 5 ) );
+ 
+StochSell = Cross ( StochD( 10, 5, 5 ), StochK( 10, 5 ) );
+ 
+StBuy = StochK( 10, 5 ) > StochD( 10, 5, 5 );
+ 
+StSell = StochK( 10, 5 ) < StochD( 10, 5, 5 );
+ 
+//============== ADX ==============
+adxBuy =  Cross( PDI( 14 ), MDI( 14 ) );
+ 
+adxSell = Cross( MDI( 14 ), PDI( 14 ) );
+ 
+adxBuy = ExRem( adxBuy, adxSell );
+ 
+adxSell = ExRem( adxSell, adxBuy );
+ 
+adxbuy1 = PDI( 14 ) > MDI( 14 );
+ 
+adxsell1 = MDI( 14 ) > PDI( 14 );
+ 
+//============== TMA ==============
+function ZeroLagTEMA( array, period )
+{
+    TMA1 = TEMA( array, period );
+    TMA2 = TEMA( TMA1, period );
+    Diff = TMA1 - TMA2;
+    return TMA1 + Diff ;
+}
+ 
+haClose = ( haClose + haOpen + haHigh + haLow ) / 4;
+ 
+periodtm = 55;
+ZLHa = ZeroLagTEMA( haClose, periodtm );
+ZLTyp = ZeroLagTEMA( Avg, periodtm );
+TMBuy = Cross( ZLTyp, ZLHa );
+TMSell = Cross( ZLHa, ZLTyp );
+TMBuy1 = ZLTyp > ZLHa ;
+TMSell1 = ZLHa > ZLTyp ;
+ 
+//============== ZLW ==============
+R = ( ( HHV( H, 14 ) - C ) / ( HHV ( H, 14 ) - LLV ( L, 14 ) ) ) * -100;
+MaxGraph = 10;
+PeriodZ = 10;
+EMA1 = EMA( R, PeriodZ );
+EMA2 = EMA( EMA1, 5 );
+Difference = EMA1 - EMA2;
+ZeroLagEMA = EMA1 + Difference;
+PR = 100 - abs( ZeroLagEMA );
+MoveAvg = MA( PR, 5 );
+ZBuy = Cross( PR, moveAvg ) AND PR < 30;
+ZSell = Cross( moveAvg, PR ) AND PR > 70;
+ZBuy1 = PR >= MoveAvg AND PR >= Ref( PR, -1 ) ;
+ZSell1 = ( PR < MoveAvg ) OR PR >= MoveAvg AND PR < Ref( PR, -1 ) ;
+ 
+//============== RS ==============
+p = ( H + L + C ) / 3;
+r1 = ( 2 * p ) - L;
+s1 = ( 2 * p ) - H;
+r2 = p + ( r1 - s1 );
+s2 = p - ( r2 - s1 );
+R3 = P + ( R2 - S2 );
+S3 = P - ( R3 - S2 );
+ 
+//============== IBUY ==============
+Ibuy =  Cross( RSI( 14 ), EMA( RSI( 14 ), 9 ) );
+Isell = Cross( EMA( RSI( 14 ), 9 ), RSI( 14 ) );
+Ibuy = ExRem( Ibuy, ISell );
+Isell = ExRem( ISell, Ibuy );
+BlRSI = RSI( 14 ) > EMA( RSI( 14 ), 9 );
+BrRSI = RSI( 14 ) < EMA( RSI( 14 ), 9 );
+ 
+ 
+//============== TITLE ==============
+_SECTION_BEGIN( "Title" );
+printf( "Open : " + O );
+ 
+if ( Status( "action" ) == actionIndicator )
+    (
+        Title = "Buy_Sell_Signal-3 | " + EncodeColor( colorYellow ) + "Kenzie SR System" + EncodeColor( colorYellow ) + " (" +  Name() + ") " + EncodeColor( colorYellow ) + Interval( 2 ) +
+                "  " + Date() + " " + " ? Open " + O + "  ? " + "Hi " +  H + "  ? " + "Lo " + L + "  ? " +
+                "Close " + C + " (" + WriteVal( C - Ref( C, -1 ), 1, 0 ) + " " + WriteVal( ( C - Ref( C, -1 ) ) * 100 / Ref( C, -1 ), 1.1 ) + "%)  ? Vol= " + WriteVal( V, 1.0 )
+                + " " + WriteIf( V > Vp2, EncodeColor( colorLime ) + "(Very High)", WriteIf( V > Vp1, EncodeColor( colorLime ) + "(High)", WriteIf( V > Vrg, EncodeColor( colorLime ) + "(Above Average)",
+                                 WriteIf( V<Vrg AND V>Vn1, EncodeColor( ColorRGB( 255, 0, 128 ) ) + "(Less than Average)", WriteIf( V < Vn1, "(Low)", "" ) ) ) ) ) + EncodeColor( colorGrey50 ) + "  ? "
+                + EncodeColor( colorLime ) + "EMA(Close,13) = " + WriteVal( EMA( C, 13 ), 1.2 )
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+                + "\n" + EncodeColor( colorBlack ) +
+                WriteIf ( Buy , "Signal: Go Long - Entry Price: " + WriteVal( C, 1.2 ) + " - Last Exit Price: " + WriteVal( SellPrice, 1.2 )
+                          + " (" + WriteVal( ( BuyPrice - SellPrice ), 1.2 ) + ") - StopLoss: " + WriteVal( C * .95, 1.2 ) + " - Reward Risk Ratio: " + WriteVal( ( profittaker - C ) / ( C - C * 0.95 ), 1.2 ) + " - " + EncodeColor( colorLime ) + "Strong Buy!"
+                          , "" ) +
+ 
+ 
+                WriteIf ( Sell , "Signal: Go Short - Exit Price: " + WriteVal( C, 1.2 ) + " - Profit: " + WriteVal( ( SellPrice - BuyPrice ), 1.2 ) + " (" + WriteVal( ( ( SellPrice - BuyPrice ) * 100 / BuyPrice ), 1.1 ) + "%)" + " - Profit Taking!", "" ) +
+                EncodeColor( ColorRGB( 111, 208, 255 ) ) +
+                WriteIf( Long AND NOT Buy, "Trade: Long - Entry Price: " + WriteVal( ( BuyPrice ), 1.2 ) + " - Profit: " + WriteVal( ( C - BuyPrice ), 1.2 ) + " (" + WriteVal( ( ( C - BuyPrice ) * 100 / BuyPrice ), 1.1 ) + "%)" +
+                         " - StopLoss:" + WriteVal( ( BuyPrice * .95 ), 1.2 ) + " - Reward Risk Ratio: " + WriteVal( ( profittaker - BuyPrice ) / ( BuyPrice - BuyPrice * 0.95 ), 1.2 ) + " - " + EncodeColor( colorLime ) + "Let your profit runs!", "" ) +
+                WriteIf( shrt AND NOT Sell, "Trade: Short - Exit Price: " + WriteVal( ( SellPrice ), 1.2 ) + " - Profit: " + WriteVal( ( SellPrice - BuyPrice ), 1.2 ) + " (" + WriteVal( ( ( SellPrice - BuyPrice ) * 100 / BuyPrice ), 1.1 ) + "%) - " + EncodeColor( colorLime ) + "Watch for Strong Buy Signal!", "" )
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Short Term: " +
+                WriteIf( TS > 0 AND TS < 0.3, EncodeColor( colorLime ) + "Weak Up Trend",
+                         WriteIf( TS >= 0.3 AND TS < 0.6 , EncodeColor( colorBlack ) + "Medium Up Trend",
+                                  WriteIf( TS >= 0.6, EncodeColor( colorGreen ) + "Strong Up Trend",
+                                           WriteIf( TS<0 AND TS> -0.3, EncodeColor( colorPink ) + "Weak Down Trend",
+                                                    WriteIf( TS <= -0.3 AND TS > -0.6 , EncodeColor( ColorRGB( 255, 0, 128 ) ) + "Medium Down Trend",
+                                                             WriteIf( TS <= -0.6, EncodeColor( colorRed ) + "Strong Down Trend", EncodeColor( colorGrey50 ) + "Sideways" ) ) ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Mid Term: " +
+                WriteIf( TM > 0 AND TM < 0.3, EncodeColor( colorLime ) + "Weak Up Trend",
+                         WriteIf( TM >= 0.3 AND TM < 0.6 , EncodeColor( colorBlack ) + "Medium Up Trend",
+                                  WriteIf( TM >= 0.6, EncodeColor( colorGreen ) + "Strong Up Trend",
+                                           WriteIf( TM<0 AND TM> -0.3, EncodeColor( colorPink ) + "Weak Down Trend",
+                                                    WriteIf( TM <= -0.3 AND TM > -0.6 , EncodeColor( ColorRGB( 255, 0, 128 ) ) + "Medium Down Trend",
+                                                             WriteIf( TM <= -0.6, EncodeColor( colorRed ) + "Strong Down Trend", EncodeColor( colorGrey50 ) + "Sideways" ) ) ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Long Term: " +
+                WriteIf( TL > 0 AND TL < 0.3, EncodeColor( colorLime ) + "Weak Up Trend",
+                         WriteIf( TL >= 0.3 AND TL < 0.6 , EncodeColor( colorBlack ) + "Medium Up Trend",
+                                  WriteIf( TL >= 0.6, EncodeColor( colorGreen ) + "Strong Up Trend",
+                                           WriteIf( TL<0 AND TL> -0.3, EncodeColor( colorPink ) + "Weak Down Trend",
+                                                    WriteIf( TL <= -0.3 AND TL > -0.6 , EncodeColor( ColorRGB( 255, 0, 128 ) ) + "Medium Down Trend",
+                                                             WriteIf( TL <= -0.6, EncodeColor( colorRed ) + "Strong Down Trend", EncodeColor( colorGrey50 ) + "Sideways" ) ) ) ) ) )
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+                + "\n" + EncodeColor( 47 ) + "?AccDist(): " + WriteIf( wu, EncodeColor( colorBlack ) + "Accumulation", WriteIf( wd, EncodeColor( colorRed ) + "Distribution", "Neutral" ) )
+ 
+                + "\n" + EncodeColor( 47 ) + "?RSI(14): " + WriteIf( RSI( 14 ) > 30 AND RSI( 14 ) < 70, EncodeColor( colorBlack ), WriteIf( RSI( 14 ) < 30 , EncodeColor( colorBlue ), EncodeColor( colorRed ) ) ) + WriteVal( RSI( 14 ), format = 1.1 )
+                + WriteIf( RSI( 14 ) > 30 AND RSI( 14 ) < 70, " Range" + EncodeColor( colorBlack ), WriteIf( RSI( 14 ) < 30 , " OverSold" + EncodeColor( colorBlue ), " OverBought" + EncodeColor( colorRed ) ) )
+ 
+                + "\n" + EncodeColor( 47 ) + "?CCI(14): " + WriteIf( CCI( 14 ) > -100 AND CCI( 14 ) < 100, EncodeColor( colorBlack ), WriteIf( CCI( 14 ) < -100 , EncodeColor( colorBlue ), EncodeColor( colorRed ) ) ) + WriteVal( CCI( 14 ), format = 1.1 )
+                + WriteIf( CCI( 14 ) > -100 AND CCI( 14 ) < 100, " Range" + EncodeColor( colorBlack ), WriteIf( CCI( 14 ) < -100 , " OverSold" + EncodeColor( colorBlue ), " OverBought" + EncodeColor( colorRed ) ) )
+ 
+                + "\n" + EncodeColor( 47 ) + "?ROC(C,14): " + WriteIf( ROC( C, 14 ) > -10 AND ROC( C, 14 ) < 10, EncodeColor( colorBlack ), WriteIf( ROC( C, 14 ) < -10 , EncodeColor( colorBlue ), EncodeColor( colorRed ) ) ) + WriteVal( ROC( C, 14 ), format = 1.1 )
+                + WriteIf( ROC( C, 14 ) > -10 AND ROC( C, 14 ) < 10, " Range" + EncodeColor( colorBlack ), WriteIf( ROC( C, 14 ) < -10 , " OverSold" + EncodeColor( colorBlue ), " OverBought" + EncodeColor( colorRed ) ) )
+ 
+                + "\n" + EncodeColor( 47 ) + "?Wm%R(14): " + WriteIf( WR > -80 AND WR < -20, EncodeColor( colorBlack ), WriteIf( WR < -80 , EncodeColor( colorBlue ), EncodeColor( colorRed ) ) ) + WriteVal( WR, format = 1.1 )
+                + WriteIf( WR > -80 AND WR < -20, " Range" + EncodeColor( colorBlack ), WriteIf( WR < -80 , " OverSold" + EncodeColor( colorBlue ), " OverBought" + EncodeColor( colorRed ) ) )
+ 
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Signal(IBuy): " + WriteIf( Ibuy, EncodeColor( colorBlack ) + "BuyWarning", WriteIf( Isell, EncodeColor( colorRed ) + "SellWarning", WriteIf( BlRSI, EncodeColor( colorBlack ) + "BullishZone", WriteIf( BrRSI, EncodeColor( colorRed ) + "BearishZone", "Neutral" ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Signal(TMA): " + WriteIf( TMBuy, EncodeColor( colorBlack ) + "Buy", WriteIf( TMSell, EncodeColor( colorRed ) + "Sell", WriteIf( TMBuy1, EncodeColor( colorBlack ) + "Bullish", WriteIf( TMSell1, EncodeColor( colorRed ) + "Bearish", "Neutral" ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Signal(MACD): " + WriteIf( MB, EncodeColor( colorBlack ) + "Buy", WriteIf( MS, EncodeColor( colorRed ) + "Sell", WriteIf( MB1, EncodeColor( colorBlack ) + "Bullish", WriteIf( MS1, EncodeColor( colorRed ) + "Bearish", "Neutral" ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Signal(Stoch): " + WriteIf( StochBuy, EncodeColor( colorBlack ) + "Buy", WriteIf( StochSell, EncodeColor( colorRed ) + "Sell", WriteIf( StBuy, EncodeColor( colorBlack ) + "Bullish", WriteIf( StSell, EncodeColor( colorRed ) + "Bearish", "Neutral" ) ) ) )
+ 
+                + "\n" + EncodeColor( colorBlack ) + "?Signal(ADX): " + WriteIf( adxBuy, EncodeColor( colorBlack ) + "Buy", WriteIf( adxSell, EncodeColor( colorRed ) + "Sell", WriteIf( adxBuy1, EncodeColor( colorBlack ) + "Bullish", WriteIf( adxSell1, EncodeColor( colorRed ) + "Bearish", "Neutral" ) ) ) )
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+                + "\n" + EncodeColor( 47 ) + "?TrStop: " + EncodeColor( colorLime ) + WriteVal( TrailStop, format = 1.0 )
+                + EncodeColor( 47 ) + " TrgPrice: " + EncodeColor( colorLime ) + WriteVal( Profittaker, format = 1.0 )
+                + "\n" + EncodeColor( 47 ) + "?R1: " + EncodeColor( colorOrange ) + WriteVal( r1, format = 1.0 )
+                + EncodeColor( 47 ) + " R2: " + EncodeColor( colorOrange ) + WriteVal( r2, format = 1.0 )
+                + EncodeColor( 47 ) + " R3: " + EncodeColor( colorOrange ) + WriteVal( r3, format = 1.0 )
+                + "\n" + EncodeColor( 47 ) + "?S1: " + EncodeColor( colorOrange ) + WriteVal( s1, format = 1.0 )
+                + EncodeColor( 47 ) + " S2: " + EncodeColor( colorOrange ) + WriteVal( s2, format = 1.0 )
+                + EncodeColor( 47 ) + " S3: " + EncodeColor( colorOrange ) + WriteVal( s3, format = 1.0 )
+ 
+                + "\n" + EncodeColor( colorGrey50 ) + "--------------------------------------"
+ 
+    );
+ 
+ 
+//============== BACKGROUND NAME ==============
+ 
+pxwidth = Status( "pxwidth" );
+ 
+pxheight = Status( "pxheight" );
+ 
+GfxSetOverlayMode( 1 );
+ 
+GfxSetBkMode( 0 ); // transparent
+ 
+GfxSelectFont( "Amienne", Status( "pxheight" ) / 15 );
+ 
+GfxSetTextColor( colorGrey40 );
+ 
+//GfxTextOut( "Kenzie Sebastian", Status("pxwidth")/5.3, Status("pxheight")/5 );
+ 
+//============================
+ 
+////BACKGROUND COLOR////////////////////////////////////////////////////////
+//SetChartBkColor(ColorRGB(255,200,255));
+//SetChartBkGradientFill( colorPlum, colorPlum);
+/////////////////////////////////////////////////////////////////////////////////////
+ 
+ 
+ 
+_SECTION_END();
+ 
+_SECTION_BEGIN( "Keltner Bands" );
+ 
+P = ParamField( "Price field", -1 );
+ 
+Periods = Param( "Periods", 15, 2, 300, 1 );
+ 
+Width = Param( "Width", 2, 0, 10, 0.05 );
+ 
+Color = ParamColor( "Color", colorCycle );
+ 
+Style = ParamStyle( "Style" );
+ 
+CenterLine = MA( P, Periods );
+ 
+KTop   = CenterLine + Width * ATR( Periods );
+ 
+KBot = CenterLine - Width * ATR( Periods );
+ 
+Plot( KTop, "KBTop" + _PARAM_VALUES(), Color, Style );
+ 
+Plot( KBot, "KBBot" + _PARAM_VALUES(), Color, Style );
+_SECTION_END();

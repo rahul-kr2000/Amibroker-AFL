@@ -1,0 +1,77 @@
+EMA2=EMA(C,2);
+EMA4=EMA(C,4);
+EMA8=EMA(C,8);
+EMA17=EMA(C,17);
+EMA34=EMA(C,34);
+FMA1=(EMA2-EMA4)+EMA2;
+FMA2=(EMA4-EMA8)+EMA4;
+FMA4=(EMA8-EMA17)+EMA8;
+FMA8=(EMA17-EMA34)+EMA17;
+Plot(FMA4,"FMA4",colorGreen,styleThick);
+Plot(FMA8,"FMA8",colorRed,styleThick);
+Buy=FMA4>FMA8;
+Sell=FMA4<FMA8;
+Buy=ExRem(Buy,Sell);
+Sell=ExRem(Sell,Buy);
+BuyPrice=ValueWhen(Buy,C);
+SellPrice=ValueWhen(Sell,C);
+PlotShapes(shapeHollowUpArrow * Buy,colorBrightGreen,0,L, Offset=-45);
+PlotShapes(shapeHollowDownArrow * Sell,colorRed,0,H, Offset=-45);
+A=(H+L)/2;
+var1=Wilders(A,34);
+var2=Wilders(A,5);
+var3=var2-var1;
+var4=var3-Wilders(var3,5);
+Var5=(H-L)/V;
+AO=Var3;
+AC=Var4;
+barcolor=IIf(AO>Ref(AO,-1) AND AC>Ref(AC,-1),colorGreen,IIf(AO<Ref(AO,-1) AND AC<Ref(AC,-1),colorRed,IIf(V>0 AND Var5<Ref(Var5,-1) AND V>Ref(V,-1),colorGold,colorBlack)));
+
+HaClose = (O+H+L+C)/4;
+HaOpen = AMA( Ref( HaClose, -1 ), 0.5 );
+HaHigh = Max( H, Max( HaClose, HaOpen ) );
+HaLow = Min( L, Min( HaClose, HaOpen ) );
+// Velvoort is using not original, but modified Heikin-Ashi close
+HaClose = ( HaClose + HaOpen + HaHigh + HaLow )/4;
+// you can switch between Heikin-Ashi chart and regular candlestick chart
+Plot( C, "Regular candles " + Name(), barcolor, styleCandle );
+
+_SECTION_BEGIN("Background text");
+SetChartBkColor(colorBlack);
+GraphXSpace=Param("GraphXSpace",10,-45,200,1);
+C13=Param("fonts",20,10,30,1 );
+C14=Param("left-right",2.1,1.0,5.0,0.1 );
+C15=Param("up-down",12,1,20,1 );
+Miny = Status("axisminy");
+Maxy = Status("axismaxy");
+lvb = Status("lastvisiblebar");
+fvb = Status("firstvisiblebar");
+pxwidth = Status("pxwidth");
+pxheight = Status("pxheight");
+GfxSetBkMode(transparent=1);
+GfxSetOverlayMode(1);
+GfxSelectFont("Candara", Status("pxheight")/C13 );
+GfxSetTextAlign( 6 );
+GfxSetTextColor( ColorRGB (217,217,213));
+GfxTextOut( Name(), Status("pxwidth")/C14, Status("pxheight")/C15 );
+GfxSelectFont("Tahoma", Status("pxheight")/C13*0.5 );
+GfxSetTextColor( ColorRGB (103,103,103));
+GfxTextOut( "By", Status("pxwidth")/C14, Status("pxheight")/C15*2.5 );
+GfxSelectFont("Candara", Status("pxheight")/C13*0.5 );
+GfxSetTextColor( ColorRGB (103,103,103));
+GfxTextOut( "Volume Scan Report - 15m | Sai Stock Broking 09825340778", Status("pxwidth")/C14, Status("pxheight")/C15*4 );
+GfxSelectFont("MS Sans Serif", 10, 500, False, False, 0);
+_SECTION_END();
+_SECTION_BEGIN("Title");
+
+DODay = TimeFrameGetPrice("O", inDaily);
+DHiDay = TimeFrameGetPrice("H", inDaily); 
+DLoDay = TimeFrameGetPrice("L", inDaily); 
+Title = EncodeColor(colorWhite)+"Volume Scan Report - 15m | * SAI STOCK BROKING 09825340778 *  "+EncodeColor(colorWhite)+ Name() + ", " + Interval(2) + ", " + Date() + 
+EncodeColor(colorWhite)   +  "\nO " + EncodeColor(colorWhite) + O + 
+
+ ",   H :  "   + H + 
+ ",   L  :  " + L + 
+ ",   C  :  "  + C +
+EncodeColor(colorWhite)+ "\n Day-Open : " +DODay + "  Day-High : " +DHiDay + "  Day-Low : " + DLoDay 
+;
