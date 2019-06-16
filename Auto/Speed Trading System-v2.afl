@@ -1,0 +1,30 @@
+SetChartOptions(0,chartShowArrows|chartShowDates);
+// Base trading system
+Buy = Cross( C, MA( C, 10 ) );
+Sell = Cross( MA( C, 5 ), C );
+Short = Cross( MA( C, 10 ), C );
+Cover = Cross( C, MA( C, 5 ) );
+// Speed calculation
+Speed = abs( C - Ref( C, -1 ) );
+// SpeedUp is boolean, which is true when speed increases
+SpeedUp = Speed > Ref( Speed, -1 );
+SpeedDown = Speed < Ref( Speed, -1 );
+// these statements modify trading system rules
+// to enter long/short only when speed increases
+// (hypothesis 1)
+Buy = Buy AND SpeedUp;
+Short = Short AND SpeedUp;
+
+Plot(C,"Candle",IIf(Buy, colorGreen, IIf (Sell, colorRed, colorBlue)), styleCandle);
+
+shapes = Buy * shapeUpArrow + Sell * shapeDownArrow;
+
+PlotShapes(shapes, IIf (Buy, colorGreen, IIf(Sell, colorRed, colorBlue)));
+
+//StaticVarRemove("*");
+CONST_PROFIT_POINTS = 10;
+STOPLOSS = 0; 
+SKIPBAR = 0;
+#include <orders.afl>
+ProcessTicks(True);
+
