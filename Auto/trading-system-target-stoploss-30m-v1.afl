@@ -1,4 +1,4 @@
-#include <algotrader-util.afl>
+//#include <algotrader-util.afl>
 
 
 // https://www.slicontrol.com/profit-trading-system-target-stoploss-amibroker-afl/
@@ -86,13 +86,25 @@ for( i = 0; i < BarCount; i++ )
 	 }
 }
 
+//_TRACE("B: " + Buy + " S: " + Sell);
+
+//StaticVarRemove("*");
+CONST_PROFIT_POINTS = 15;
+STOPLOSS = 0; 
+SKIPBAR = 0;
+#include <orders.afl>
+ProcessTicks(False);
 
 
+
+
+/*
 BS = StrToNum(NumToStr(BS));
 SS = StrToNum(NumToStr(SS));
 
 B = NumToStr(Long,1);
 S = NumToStr(Shrt,1);
+
 
 ///BSS = BS > 0 && BS <= 2;
 //SSS = SS > 0 && SS <= 2;
@@ -149,7 +161,7 @@ else if (Nz(StaticVarGet("OrderPlaced"))==1 && SSS == True)
 		placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
 	}
 }
-
+*/
 
 
 

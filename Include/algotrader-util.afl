@@ -42,8 +42,8 @@ PLATFORM_PORTFOLIO_FILE_PATH = "C:\\autotrader\\data\\order\\platform_portfolio.
 */
 
 //AT_RESET_ORDERNUM = ParamList("Reset Order Number", "YES|NO", 1);
-
-AT_SYMBOL = ParamStr("Order symbol", "CRUDEOILM19JUNFUT");
+//"ZINCMINI31JULFUT"
+AT_SYMBOL = ParamStr("Order symbol", "ZINCMINI19JULFUT");
 AT_QUANTITY = Param("Order quantity (lot size)", 1, 0, 300000, 10);
 AT_EXCHANGE = ParamList("Order exchange", "MCX|NFO|BSE|BFO|NSE|CDS|NCDEX|NCD|BCD");
 AT_INSTRUMENT = ParamList("Order instrument", "FUTCOM|EQ|FUTIDX|OPTIDX|FUTSTK|OPTSTK|FUTCUR|OPTCUR|FUTCOM|OPTCOM");
@@ -105,8 +105,8 @@ if( Nz( StaticVarGet("InitializationDone") ) == 0 )
 	startTime = NumToStr(Now(5), 1.0, False);
 	StaticVarSetText( "globalStartTime", startTime);
 	
-	StaticVarSetText( "HikenBuyOrSell", "");
-	StaticVarSetText( "KrishnaBuyOrSell", "");
+	//StaticVarSetText( "HikenBuyOrSell", "");
+	//StaticVarSetText( "KrishnaBuyOrSell", "");
 }
 
 function numToStrPlain(num) {

@@ -19,7 +19,8 @@ Plot(C,"Candle",IIf(Buy, colorGreen, IIf (Sell, colorRed, colorBlue)), styleCand
 
 shapes = Buy * shapeUpArrow + Sell * shapeDownArrow;
 
-PlotShapes(shapes, IIf (Buy, colorGreen, IIf(Sell, colorRed, colorBlue)));
+PlotShapes(shapes, IIf (Buy, colorGreen, shapeNone ),0, L,Offset = -10);
+PlotShapes(shapes, IIf(Sell, colorRed, shapeNone),0, L,Offset = 10);
 
 //StaticVarRemove("*");
 CONST_PROFIT_POINTS = 10;
@@ -27,4 +28,5 @@ STOPLOSS = 0;
 SKIPBAR = 0;
 #include <orders.afl>
 ProcessTicks(True);
+
 

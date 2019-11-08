@@ -2,12 +2,12 @@
 
 // 
 
-#include <algotrader-util.afl>
+//#include <algotrader-util.afl>
 
 SetChartOptions(0,chartShowArrows|chartShowDates);
 
 _SECTION_BEGIN("Swing");
-no=8;
+no=10;
 res=HHV(H,no);
 sup=LLV(L,no);
 
@@ -45,6 +45,9 @@ Plot(supres,"Swing",colorYellow,styleStaircase);
 a=ExRem(a,b);
 b=ExRem(b,a);
 
+Buy = a;
+Sell = b;
+
 PlotShapes(IIf(a, shapeUpArrow, shapeNone),colorWhite, 0,Low,-15);  
 PlotShapes(IIf(b, shapeDownArrow, shapeNone),colorYellow, 0,High,-15);  
 
@@ -59,57 +62,29 @@ BuyPrice=ValueWhen(a,C);
 SellPrice=ValueWhen(b,C);
 
 //StaticVarRemove("*");
+CONST_PROFIT_POINTS = 0.3;
+STOPLOSS = 0; 
+SKIPBAR = 1;
+TradeOnlyOnce = True;
+#include <Orders_FixedPoint.afl>
+ProcessTicks(false);
 
+/*
 bbb = WriteIf(BarsSince(a) == 0, "1", "0");
 sss = WriteIf(BarsSince(b) == 0, "1", "0");
-
-/*
-aa = WriteIf(a==1, "1", "0");
-bb = WriteIf(b==1,"1","0");
-
-if (aa == "1")
-{
-	_TRACE("Signal-Buy");
-}
-if (bb == "1")
-{
-	_TRACE("Signal-Sell");
-}	
-*/
-/*
-_TRACE("a: " + LastValue(a) + " - b: " + LastValue(b));
-
-
-
-if (LastValue(a) == True) 
-{
-	StaticVarSet("CommmodityOrderPlaced", 1);
-	_TRACE("BUY@" + C);
-	//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );	
-}
-else if (LastValue(b) == True)
-{
-	StaticVarSet("CommmodityOrderPlaced", 2);
-	_TRACE("SELL@" + C);
-	//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
-}
-*/
-
-
-//_TRACE("H: " + H + ", L: " + L + ", High: " + High + ", LOW: " + Low);
 
 if (Nz(StaticVarGet("CommmodityOrderPlaced"))==0) 
 {
 	if (bbb == "1") 
 	{
 		StaticVarSet("CommmodityOrderPlaced", 1);
-		_TRACE("BUY@" + H);
+		_TRACE("BUY@" + C + "@" + Date());
 		placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );	
 	}
 	else if (sss == "1")
 	{
 		StaticVarSet("CommmodityOrderPlaced", 2);
-		_TRACE("SELL@" + L);
+		_TRACE("SELL@" + C+ "@" + Date());
 		placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
 	}
 }
@@ -117,16 +92,16 @@ if (Nz(StaticVarGet("CommmodityOrderPlaced"))==0)
 if (Nz(StaticVarGet("CommmodityOrderPlaced"))==2 && bbb == "1")  
 {
 	StaticVarSet("CommmodityOrderPlaced", 1);
-	_TRACE("BUY@" + H);
+	_TRACE("BUY@" + C+ "@" + Date());
 	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );	
 }
 else if (Nz(StaticVarGet("CommmodityOrderPlaced"))==1 && sss == "1")  
 {
 	StaticVarSet("CommmodityOrderPlaced", 2);
-	_TRACE("SELL@" + L);
+	_TRACE("SELL@" + C+ "@" + Date());
 	placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );	
 }
-//*/
+*/
 
 
 Title = EncodeColor(colorBlue)+ "Commodities Trading System" + " - " + Name() + " - " + EncodeColor(colorRed)+ Interval(2) + EncodeColor(colorBlue) +
