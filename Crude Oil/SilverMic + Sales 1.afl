@@ -1,0 +1,493 @@
+Plot( 95, "", 7, styleLine );
+Plot( -95, "", 7, styleLine );
+Plot( 15, "", 7, styleDashed );
+Plot( -20, "", 7, styleDashed );
+n = 4;
+// n = 27 // Must give good result
+// n = 18 // Natural Gas
+n = Param( "n", 7, 2, 200, 1, 4 );
+n = 18;
+p = 30;
+// P = 30 // Natural gas
+p = Param( "p", 30, 2, 100, 1 );
+ys1 = ( Open + High + Low + Close * 9 ) / 4;
+rk3 = EMA( ys1, n );
+rk4 = StDev( ys1, n );
+rk5 = ( ys1 - rk3 ) * 100 / rk4;
+rk6 = EMA( rk5, n );
+UP = EMA( rk6, n );
+DOWN = EMA( up, n );
+Oo = IIf( up < down, up, down );
+Hh = Oo;
+Ll = IIf( up < down, down, up );
+Cc = Ll;
+Buy = Cross( up, down );
+Sell = Cross( down, up );
+Short = Sell;
+Cover = Buy;
+Buy = ExRem( Buy, Sell );
+Sell = ExRem( Sell, Buy );
+barcolor2 = IIf( Ref( oo, -1 ) < Oo AND Cc < Ref( Cc, 1 ), colorBlue, IIf( up > down, colorGreen, colorRed ) );
+//PlotOHLC( Oo, hh, ll, Cc, "Modified " + Name(), barcolor2, styleCandle );
+//Plot(C, "Price", colorAqua, styleCandle);
+//PlotOHLC( O, H, L, C, "Modified " + Name(), barcolor2, styleCandle );
+
+SetChartOptions( 1, chartShowDates );
+BKswitch = ParamToggle( "Background Color", "On,Off" );
+OUTcolor = ParamColor( "Outer Panel Color", colorTeal );
+INUPcolor = ParamColor( "Inner Panel Upper", colorDarkTeal );
+INDNcolor = ParamColor( "Inner Panel Lower", colorPlum );
+TitleColor = ParamColor( "Title Color ", colorBlack );
+
+if( NOT BKswitch )
+{
+    SetChartBkColor( OUTcolor ); // color of outer border
+    SetChartBkGradientFill( INUPcolor, INDNcolor, TitleColor ); // color of inner panel
+}
+
+//AlertIf( Buy , "SOUND C:\\Windows\\Media\\chimes.wav", "Audio alert", 2 );
+//AlertIf( Sell , "SOUND C:\\Windows\\Media\\alert.wav", "Audio alert", 2 );
+Long = Flip( Buy, Sell );
+Shrt = Flip( Sell, Buy );
+BuyPrice = ValueWhen( Buy, C );
+SellPrice = ValueWhen( Sell, C );
+Edc = (
+          WriteIf( Buy AND Ref( shrt, -1 ), " BUY @ " + C + " ", "" ) +
+          WriteIf( Sell AND Ref( Long, -1 ), " SEll @ " + C + " ", "" ) +
+          WriteIf( Sell , "Last Trade Profit Rs." + ( C - BuyPrice ) + "", "" ) +
+          WriteIf( Buy , "Last Trade Profit Rs." + ( SellPrice - C ) + "", "" ) );
+
+
+
+
+// ------------------- BUY SELL LOGIC --------------------//
+//StaticVarRemove("*");
+CONST_PROFIT_POINTS = 100;
+STOPLOSS = 100; 
+SKIPBAR = 1;
+//SellStop2
+#include <orders.afl>
+ProcessTicks(False);
+// ------------------- BUY SELL LOGIC END--------------------//
+
+
+
+
+//============== TITLE ==============
+_SECTION_BEGIN( "Title" );
+no = Param( "Swing", 6, 1, 55 );
+res = HHV( H, no );
+sup = LLV( L, no );
+avd = IIf( C > Ref( res, -1 ), 1, IIf( C < Ref( sup, -1 ), -1, 0 ) );
+avn = ValueWhen( avd != 0, avd, 1 );
+tsl = IIf( avn == 1, sup, res );
+dec = ( Param( "Decimals", 2, 0, 7, 1 ) / 10 ) + 1;
+
+if( Status( "action" ) == actionIndicator )
+    (
+        Title = EncodeColor( 55 ) + Title = Name() + " " + EncodeColor( 32 ) + Date() +
+                                            " " + EncodeColor( 5 ) + "{{INTERVAL}} " +
+                                            EncodeColor( 55 ) + " Open = " + EncodeColor( 52 ) + WriteVal( O, dec ) +
+                                            EncodeColor( 55 ) + " High = " + EncodeColor( 5 ) + WriteVal( H, dec ) +
+                                            EncodeColor( 55 ) + " Low = " + EncodeColor( 32 ) + WriteVal( L, dec ) +
+                                            EncodeColor( 55 ) + " Close = " + EncodeColor( 52 ) + WriteVal( C, dec ) +
+                                            EncodeColor( 55 ) + " Volume = " + EncodeColor( 52 ) + WriteVal( V, 1 )
+                                            + "\n" + EncodeColor( colorBrightGreen ) +
+                                            WriteIf( Buy , "Signal: Go Long - Entry Price: " + WriteVal( C ) + " - Traget: " + WriteVal( ( BuyPrice - tsl ) + BuyPrice )
+                                                    + " - StopLoss:" + WriteVal( tsl ) + " "
+                                                    , "" ) +
+                                            "\n" + EncodeColor( colorRed ) +
+                                            WriteIf( Sell , "Signal: Go Short - Entry Price: " + WriteVal( C ) + " - Target: " + WriteVal( ( tsl - SellPrice ) - SellPrice ) + " - StopLoss:" + WriteVal( tsl ) + " ", "" ) +
+                                            EncodeColor( colorTurquoise ) +
+                                            WriteIf( Long AND NOT Buy, "Trade: Long - Entry Price: " + WriteVal( ( BuyPrice ) ) + " - Profit: " + WriteVal( ( C - BuyPrice ) ) + " " + EncodeColor( colorLime ) + "Let your profit runs!", "" ) +
+                                            EncodeColor( colorLightOrange ) +
+                                            WriteIf( shrt AND NOT Sell, "Trade: Short - Entry Price: " + WriteVal( ( SellPrice ) ) + " - Profit: " + WriteVal( ( SellPrice - C ) ) + " - " + EncodeColor( colorLime ) + "Let your profit runs!", "" )
+    );
+
+_SECTION_END();
+//Magfied Market Price
+FS = Param( "Font Size", 30, 11, 100, 1 );
+GfxSelectFont( "Times New Roman", FS, 700, True );
+GfxSetBkMode( colorWhite );
+GfxSetTextColor( ParamColor( "Color", colorBrightGreen ) );
+Hor = Param( "Horizontal Position", 590, 1, 1200, 1 );
+Ver = Param( "Vertical Position", 12, 1, 830, 1 );
+GfxTextOut( "" + C, Hor , Ver );
+YC = TimeFrameGetPrice( "C", inDaily, -1 );
+DD = Prec( C - YC, 2 );
+xx = Prec( ( DD / YC ) * 100, 2 );
+GfxSelectFont( "Times New Roman", 11, 700, True );
+GfxSetBkMode( colorBlack );
+GfxSetTextColor( ParamColor( "Color", colorYellow ) );
+GfxTextOut( "" + DD + " (" + xx + "%)", Hor , Ver + 45 );
+_SECTION_END();
+
+H1 = SelectedValue( TimeFrameGetPrice( "H", inDaily, -1 ) );
+L1 = SelectedValue( TimeFrameGetPrice( "L", inDaily, -1 ) );
+C1 = SelectedValue( TimeFrameGetPrice( "C", inDaily, -1 ) );
+H2 = SelectedValue( TimeFrameGetPrice( "H", inDaily, 0 ) );
+L2 = SelectedValue( TimeFrameGetPrice( "L", inDaily, 0 ) );
+O1 = SelectedValue( TimeFrameGetPrice( "open", inDaily, 0 ) );
+F4 = 0;
+D1 = ( H1 - L1 );
+D2 = ( H2 - L2 );
+F1 = D1 * 0.433;
+F2 = D1 * 0.766;
+F3 = D1 * 1.35;
+
+if( D2 <= F1 )
+    F4 = F1;
+else
+    if( D2 <= F2 )
+        F4 = F2;
+    else
+        F4 = F3;
+
+S_P = ( O1 - F4 );
+B_P = ( O1 + F4 );
+BP = ( L2 + F4 );
+BPTGT = ( BP + ( BP * .0065 ) );//.0015 brokerage
+BPSTPLS = ( BP - ( BP * .0085 ) );
+SP = ( H2 - F4 );
+SPTGT = ( SP - ( SP * .0065 ) );
+SPSTPLS = ( SP + ( SP * .0085 ) );
+p = ( H1 + L1 + C1 ) / 3;
+s1 = ( H1 );
+r1 = ( L1 );
+r2 = SelectedValue( L2 );
+s2 = SelectedValue( H2 );
+
+//CONDITION
+Filter = Buy OR Sell;
+AddColumn( IIf( Buy, 66, 1 ), "Buy", formatChar, 1, bkcolor = IIf( Buy, 43, 33 ) );
+AddColumn( IIf( Sell, 83, 1 ), "Sell", formatChar, 1, bkcolor = IIf( Sell, 25, 32 ) );
+AddColumn( C, "CMP", 1.2, colorDefault, colorLightBlue );
+AddColumn( BP, "SELL PRICE", 1.2, colorDefault, colorGreen );
+AddColumn( BPTGT, "TGT PRICE", 1.2, colorDefault, colorBrown );
+AddColumn( BPSTPLS, "STPLS BUY", 1.2, colorDefault, colorRed );
+AddColumn( p, "PIVOT", 1.2, colorDefault, colorYellow );
+AddColumn( SPSTPLS, "STPLS SELL", 1.2, colorDefault, colorRed );
+AddColumn( SP, "SELL PRICE", 1.2, colorDefault, colorGreen );
+AddColumn( SPTGT, "TGT PRICE", 1.2, colorDefault, colorBrown );
+AddColumn( H1, "PRE-HIGH" );
+AddColumn( L1, "PRE-LOW" );
+AddColumn( D1, "PRE-DIFF" );
+AddColumn( F1, "0.433" );
+AddColumn( F2, "0.766" );
+AddColumn( F3, "1.35" );
+AddColumn( H2, "D-HIGH" );
+AddColumn( L2, "D-LOW" );
+AddColumn( D2, "D-DIFF" );
+AddColumn( F4, "SELECT FACT" );
+
+
+_SECTION_BEGIN( "Bollinger Bands" );
+P = ParamField( "Price field", -1 );
+Periods = Param( "Periods", 15, 2, 100, 1 );
+Width = Param( "Width", 2, 0, 10, 0.05 );
+Color = ParamColor( "Color", colorCycle );
+Style = ParamStyle( "Style" );
+Plot( BBandTop( P, Periods, Width ), "BBTop" + _PARAM_VALUES(), Color, Style );
+Plot( BBandBot( P, Periods, Width ), "BBBot" + _PARAM_VALUES(), Color, Style );
+_SECTION_END();
+_SECTION_BEGIN( "MA1" );
+P1 = ParamField( "Price field", -1 );
+Periods1 = Param( "Periods1", 4, 2, 200, 1, 4 );
+Plot( MA( P1, Periods1 ), _DEFAULT_NAME(), ParamColor( "Color", colorCycle ),
+      ParamStyle( "Style" ) );
+_SECTION_END();
+P2 = ParamField( "Price field", -1 );
+Periods2 = Param( "Periods2", 1, 2, 200, 1, 1 );
+Plot( MA( P2, Periods2 ), _DEFAULT_NAME(), ParamColor( "Color", colorCycle ),
+      ParamStyle( "Style" ) );
+PlotShapes( Buy * shapeUpArrow + Sell * shapeDownArrow, IIf( Buy, colorWhite, colorYellow ) );
+Cover = Buy;
+Short = Sell;
+Buy = ExRem( Buy, Sell );
+Sell = ExRem( Sell, Buy );
+AlertIf( Buy, "", "BUY @ " + C, 1 );
+AlertIf( Sell, "", "SELL @ " + C, 2 );
+no = Param( "Swing", 8, 1, 55 );
+tsl_col = ParamColor( "Color", colorLightGrey );
+res = HHV( H, no );
+sup = LLV( L, no );
+avd = IIf( C > Ref( res, -1 ), 1, IIf( C < Ref( sup, -1 ), -1, 0 ) );
+avn = ValueWhen( avd != 0, avd, 1 );
+tsl = IIf( avn == 1, sup, res );
+no = Optimize( "TSL", Param( "A (Change To Optimise)", 10, 1, 55 , 1 ), 1, 55 , 1 );
+tsl_col = ParamColor( "Color", colorLightGrey );
+res = HHV( H, no );
+sup = LLV( L, no );
+avd = IIf( C > Ref( res, -1 ), 1, IIf( C < Ref( sup, -1 ), -1, 0 ) );
+avn = ValueWhen( avd != 0, avd, 1 );
+dtsl = IIf( avn == 1, sup, res );
+SellPrice = ValueWhen( Short, C, 1 );
+BuyPrice = ValueWhen( Buy, C, 1 );
+Long = Flip( Buy, Sell );
+Shrt = Flip( Short, Cover );
+Relax = NOT Long AND NOT Buy AND NOT shrt AND NOT Sell AND NOT Sell AND NOT Cover;
+SellSL = ValueWhen( Short, DTSL, 1 );
+BuySL = ValueWhen( Buy, DTSL, 1 );
+BuyDifference = BuyPrice - BuySL;
+SellDifference = SellSL - SellPrice;
+tar1 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + BuyDifference ), ( SellPrice - SellDifference ) );
+tar2 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + ( 2 * BuyDifference ) ), ( SellPrice - ( 2 * SellDifference ) ) );
+tar3 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + ( 4 * BuyDifference ) ), ( SellPrice - ( 4 * SellDifference ) ) );
+CloseAtEnd = ParamToggle( "Close Positions EOD", "No|Yes" );
+stopreverse = ParamToggle( "Switch To Stop And Reverse", "No|Yes", 0 );
+Trend = ATR( 21 ) < StDev( C, 21 );
+Range = ATR( 21 ) > StDev( C, 21 );
+no = 10;
+C13 = 20;
+C14 = 2.1;
+C15 = 12;
+tsl_col = ParamColor( "Color", colorLightGrey );
+res = HHV( H, no );
+sup = LLV( L, no );
+avd = IIf( C > Ref( res, -1 ), 1, IIf( C < Ref( sup, -1 ), -1, 0 ) );
+avn = ValueWhen( avd != 0, avd, 1 );
+dtsl = IIf( avn == 1, sup, res );
+SellPrice = ValueWhen( Short, C, 1 );
+BuyPrice = ValueWhen( Buy, C, 1 );
+Long = Flip( Buy, Sell );
+Shrt = Flip( Short, Cover );
+Relax = NOT Long AND NOT Buy AND NOT shrt AND NOT Sell AND NOT Sell AND NOT Cover;
+SellSL = ValueWhen( Short, DTSL, 1 );
+BuySL = ValueWhen( Buy, DTSL, 1 );
+BuyDifference = BuyPrice - BuySL;
+SellDifference = SellSL - SellPrice;
+tar1 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + BuyDifference ), ( SellPrice - SellDifference ) );
+tar2 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + ( 2 * BuyDifference ) ), ( SellPrice - ( 2 * SellDifference ) ) );
+tar3 = IIf( Buy OR Long AND NOT Relax AND NOT Sell AND NOT Cover, ( BuyPrice + ( 4 * BuyDifference ) ), ( SellPrice - ( 4 * SellDifference ) ) );
+buyach1 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > tar1, 0 );
+buyach2 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > tar2 , 0 );
+buyach3 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > tar3, 0 );
+sellach1 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < tar1 , 0 );
+sellach2 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < tar2, 0 );
+sellach3 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < tar3, 0 );
+//Settings for exploration
+Filter = Buy OR Short;
+AddColumn( IIf( Buy, 66 , 83 ), "Signal", formatChar, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( Close, "Entry Price", 1.4, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( dtsl, "Stop Loss", 1.4, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( tar1, "Target 1", 1.4, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( tar2, "Target 2", 1.4, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( tar3, "Target 3", 1.4, colorDefault, IIf( Buy , colorGreen, colorRed ) );
+AddColumn( Volume, "Volume", 1.0, colorDefault, IIf( ( Volume > 1.25 * EMA( Volume, 34 ) ), colorBlue, colorYellow ) );
+//Short = Sell;
+//Cover = Buy;
+//Short = ExRem(Short, Cover);
+//Cover = ExRem(Cover, Short);
+GraphXSpace = 5;
+pxHeight = Status( "pxchartheight" ) ;
+xx = Status( "pxchartwidth" );
+Left = 1100;
+width = 310;
+x = 5;
+x2 = 280;
+y = pxHeight;
+dist = 2 * ATR( 10 );
+dist1 = 3 * ATR( 10 );
+i = BarCount;
+bars = i;
+messageboard = ParamToggle( "Message Board", "Show|Hide", 1 );
+
+if( messageboard )
+{
+    for( i = 0; i < BarCount; i++ )
+    {
+        if( Buy[i] )
+        {
+// PlotText( "\nBuy:" + L[ i ] + "\nT= " + (L[i]*1.005) + "\nSL= " + (L[i]*0.9975), i, L[ i ]-dist[i], colorGreen, colorWhite );
+
+// Signal Display Panel //
+            SellPrice = ValueWhen( Sell, C, 1 );
+            BuyPrice = ValueWhen( Buy, L[ i ] );
+            Long = Flip( Buy, Sell );
+            Shrt = Flip( Sell, Buy );
+            BuyStop2 = L[i] * 0.9975;
+            BuyTP1 = L[i] * 1.070;
+            BuyTP2 = L[i] * 1.050;
+            BuyTP3 = L[i] * 1.035;
+            buyach1 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > BuyTP3, 0 );
+            buyach2 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > BuyTP2, 0 );
+            buyach3 = IIf( ( Buy OR Long AND NOT Relax AND NOT Cover AND NOT Short AND NOT Shrt ), H > BuyTP1, 0 );
+            GfxSelectFont( "Tahoma", 13, 100 );
+            GfxSetOverlayMode( mode = 0 );
+            GfxSelectPen( colorBrightGreen, 3 );
+            GfxSelectSolidBrush( colorBrightGreen );
+            GfxRoundRect( x, y - 163, x2, y , 7, 7 ) ;
+            GfxSetTextColor( colorGold );
+            GfxTextOut( ( " KrT group SYSTEM " ), 73, y - 165 );
+            GfxTextOut( ( " " ), 27, y - 160 );
+            GfxSetBkMode( 1 );
+            GfxSelectFont( "Arial", 10, 700, False );
+            GfxSetTextColor( colorBlue );
+            GfxSetTextAlign( 0 );
+            GfxSelectFont( "Tahoma", 13, 100 );
+            GfxTextOut( WriteIf( L[ i ], "Buy Above: " + L[ i ], "" ), 13, y - 140 );
+            GfxSetTextColor( colorGold );
+            GfxTextOut( WriteIf( BuyStop2, "Long SL: " + ( BuyStop2 ), "" ), 13, y - 120 );
+            GfxSetTextColor( colorWhite );
+            GfxTextOut( WriteIf( BuyTP1, "Buy TGT1: " + ( BuyTP3 ), "" ), 13, y - 100 );
+            GfxTextOut( WriteIf( BuyTP2, "Buy TGT2: " + ( BuyTP2 ), "" ), 13, y - 80 );
+            GfxTextOut( WriteIf( BuyTP3, "BuyTGT3: " + ( BuyTP1 ), "" ), 13, y - 60 );
+            GfxSetTextColor( colorViolet );
+            GfxTextOut( ( "Current P/L : " + WriteVal( IIf( Buy , ( C - BuyPrice ), ( C - BuyPrice ) ), 2.2 ) ), 88, y - 22 );
+            GfxTextOut( ( "Buy Signal came " + ( BarCount - bars + 1 ) * Interval() / 2 + " mins ago" ), 13, y - 40 ) ;
+            GfxTextOut
+            ( ( "" + WriteIf( buyach1, " Done: " + BuyTP3, "" ) ), 160, y - 100 );
+            GfxTextOut
+            ( ( "" + WriteIf( buyach2, " Done: " + BuyTP2, "" ) ), 160, y - 80 );
+            GfxTextOut
+            ( ( "" + WriteIf( buyach3, " Done: " + BuyTP1, "" ) ), 160, y - 60 );
+// END of Signal Display Panel //
+        }
+
+        if( Sell[i] )
+        {
+// PlotText( "Sell:" + H[ i ] + "\nT= " + (H[i]*0.995) + "\nSL= " + (H[i]*1.0025), i, H[ i ]+dist1[i], colorRed, colorWhite );
+
+// Signal Display Panel //
+            SellPrice = ValueWhen( Sell, C, 1 );
+            BuyPrice = ValueWhen( Buy, H[ i ] );
+            Long = Flip( Buy, Sell );
+            Shrt = Flip( Sell, Buy );
+            SellStop2 = H[i] * 1.0025;
+            SellTP1 = H[i] * 0.978;
+            SellTP2 = H[i] * 0.982;
+            SellTP3 = H[i] * 0.988;
+            sellach1 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < SellTP3 , 0 );
+            sellach2 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < SellTP2, 0 );
+            sellach3 = IIf( ( Short OR Shrt AND NOT Relax AND NOT Sell AND NOT Buy AND NOT Long ), L < SellTP1, 0 );
+            GfxSelectFont( "Tahoma", 13, 100 );
+            GfxSetOverlayMode( mode = 0 );
+            GfxSelectPen( colorRed, 3 );
+            GfxSelectSolidBrush( colorRed );
+            GfxRoundRect( x, y - 163, x2, y , 7, 7 ) ;
+
+            GfxTextOut( ( " " ), 27, y - 160 );
+            GfxSetBkMode( 1 );
+            GfxSelectFont( "Arial", 10, 700, False );
+            GfxSetTextColor( colorWhite );
+            GfxSetTextAlign( 0 );
+            GfxSelectFont( "Tahoma", 13, 100 );
+            GfxSetTextColor( colorGold );
+            GfxTextOut( ( " Trading System " ), 73, y - 165 );
+            GfxSetTextColor( colorWhite );
+            GfxTextOut( WriteIf( H[ i ], "Sell Below: " + H[ i ], "" ), 13, y - 140 );
+            GfxSetTextColor( colorGold );
+            GfxTextOut( WriteIf( SellStop2, "Short SL: " + ( SellStop2 ), "" ), 13, y - 120 );
+            GfxSetTextColor( colorBlue );
+            GfxTextOut( WriteIf( SellTP1, "Short TGT1: " + ( SellTP3 ), "" ), 13, y - 100 );
+            GfxTextOut( WriteIf( SellTP2, "Short TGT2: " + ( SellTP2 ), "" ), 13, y - 80 );
+            GfxTextOut( WriteIf( SellTP3, "Short TGT3: " + ( SellTP1 ), "" ), 13, y - 60 );
+            GfxSetTextColor( colorGold );
+            GfxTextOut( ( "Current P/L : " + WriteVal( IIf( Sell , ( SellPrice - C ), ( SellPrice - C ) ), 2.2 ) ), 88, y - 22 );
+            GfxTextOut( ( "sell Signal came " + ( BarCount - bars + 1 ) * Interval() / 2 + " mins ago" ), 13, y - 40 ) ;
+            GfxTextOut
+            ( ( "" + WriteIf( sellach1, " Done: " + SellTP3, "" ) ), 160, y - 100 );
+            GfxTextOut
+            ( ( "" + WriteIf( sellach2, " Done: " + SellTP2, "" ) ), 160, y - 80 );
+            GfxTextOut
+            ( ( "" + WriteIf( sellach3, " Done: " + SellTP1, "" ) ), 160, y - 60 );
+// END of Signal Display Panel //
+        }
+    }
+}
+
+Long = Flip( Buy, Sell );
+Shrt = Flip( Sell, Buy );
+BuyPrice = ValueWhen( Buy, C );
+SellPrice = ValueWhen( Sell, C );
+Edc = (
+          WriteIf( Buy AND Ref( shrt, -1 ), " BUY @ " + C + " ", "" ) +
+          WriteIf( Sell AND Ref( Long, -1 ), " SEll @ " + C + " ", "" ) +
+          WriteIf( Sell , "Last Trade Profit Rs." + ( C - BuyPrice ) + "", "" ) +
+          WriteIf( Buy , "Last Trade Profit Rs." + ( SellPrice - C ) + "", "" ) );
+
+
+//============== TITLE ==============
+_SECTION_BEGIN( "Title" );
+no = Param( "Swing", 6, 1, 55 );
+res = HHV( H, no );
+sup = LLV( L, no );
+avd = IIf( C > Ref( res, -1 ), 1, IIf( C < Ref( sup, -1 ), -1, 0 ) );
+avn = ValueWhen( avd != 0, avd, 1 );
+tsl = IIf( avn == 1, sup, res );
+dec = ( Param( "Decimals", 2, 0, 7, 1 ) / 10 ) + 1;
+
+if( Status( "action" ) == actionIndicator )
+    (
+        Title = EncodeColor( 55 ) + Title = Name() + " " + EncodeColor( 32 ) + Date() +
+                                            " " + EncodeColor( 5 ) + "{{INTERVAL}} " +
+                                            EncodeColor( 55 ) + " Open = " + EncodeColor( 52 ) + WriteVal( O, dec ) +
+                                            EncodeColor( 55 ) + " High = " + EncodeColor( 5 ) + WriteVal( H, dec ) +
+                                            EncodeColor( 55 ) + " Low = " + EncodeColor( 32 ) + WriteVal( L, dec ) +
+                                            EncodeColor( 55 ) + " Close = " + EncodeColor( 52 ) + WriteVal( C, dec ) +
+                                            EncodeColor( 55 ) + " Volume = " + EncodeColor( 52 ) + WriteVal( V , 1.25 )
+                                            + "\n" + EncodeColor( colorBrightGreen ) +
+                                            WriteIf( Buy , "Signal: Go Long - Entry Price: " + WriteVal( C ) + " - Traget: " + WriteVal( ( BuyPrice - tsl ) + BuyPrice )
+                                                    + " - StopLoss:" + WriteVal( tsl ) + " "
+                                                    , "" ) +
+                                            "\n" + EncodeColor( colorRed ) +
+                                            WriteIf( Sell , "Signal: Go Short - Entry Price: " + WriteVal( C ) + " - Target: " + WriteVal( ( tsl - SellPrice ) - SellPrice ) + " - StopLoss:" + WriteVal( tsl ) + " ", "" ) +
+                                            EncodeColor( colorTurquoise ) +
+                                            WriteIf( Long AND NOT Buy, "Trade: Long - Entry Price: " + WriteVal( ( BuyPrice ) ) + " - Profit: " + WriteVal( ( C - BuyPrice ) ) + " " + EncodeColor( colorLime ) + "Let your profit runs!", "" ) +
+                                            EncodeColor( colorLightOrange ) +
+                                            WriteIf( shrt AND NOT Sell, "Trade: Short - Entry Price: " + WriteVal( ( SellPrice ) ) + " - Profit: " + WriteVal( ( SellPrice - C ) ) + " - " + EncodeColor( colorLime ) + "Let your profit runs!", "" )
+    );
+
+_SECTION_END();
+
+if( messageboard == 0 )
+{
+    if( Status( "action" ) == actionIndicator )
+        (
+            Title = EncodeColor( 55 ) + Title = Name() +
+                                                " " + EncodeColor( 5 ) + "{{INTERVAL}} " + EncodeColor( colorSkyblue ) +
+                                                " " + Date() + " " + "\n" + EncodeColor( 55 ) + "Open-" + EncodeColor( 52 ) + O + EncodeColor( 55 ) + " High-" + EncodeColor( 5 ) + H + " " + EncodeColor( 55 ) + "Low-" + EncodeColor( 32 ) + L + " " + EncodeColor( 55 ) + "Close-" + EncodeColor( 52 ) + C + " " + EncodeColor( 55 ) + "Volume= " + EncodeColor( 52 ) + WriteVal( V ) + "\n" + "\n" +
+                                                EncodeColor( colorRed ) +
+                                                WriteIf( Buy, "Action: Go Long At " + C + " - SL " + DTSL, "" ) +
+                                                WriteIf( Short, "Action: Go Short At " + C + " - SL " + DTSL, "" ) +
+                                                WriteIf( Long AND NOT Buy, "Action : Long Taken At " + ( BuyPrice ) + " - Trail SL @ " + DTSL + "", "" ) +
+                                                WriteIf( shrt AND NOT Sell, "Action : Short Taken At " + ( SellPrice ) + " - Trail SL @ " + DTSL + "", "" ) +
+                                                WriteIf( Sell AND NOT Short, "Exit Long At " + C, "" ) +
+                                                WriteIf( Cover AND NOT Buy, "Exit Short At " + C, "" ) +
+                                                WriteIf( NOT Long AND NOT Buy AND NOT shrt AND NOT Sell, "Action: Not In A Trade - RELAX!!!", "" ) + "\n" +
+                                                WriteIf( Long AND NOT Buy, "Profit/Loss: " + ( C - BuyPrice ) + " Points", "" ) +
+                                                WriteIf( shrt AND NOT Sell, "Profit/Loss: " + ( SellPrice - C ) + " Points", "" ) + "\n" +
+                                                WriteIf( Long OR Buy OR Shrt OR Short, "Target 1: " + tar1, "" ) + "\n" +
+                                                WriteIf( Long OR Buy OR Shrt OR Short, "Target 2: " + tar2, "" ) + "\n" +
+                                                WriteIf( Long OR Buy OR Shrt OR Short, "Target 3: " + tar3, "" ) + "\n" +
+                                                WriteIf( buyach1, "Target 1 Done: " + tar1, "" ) +
+                                                WriteIf( sellach1, "Target 1 Done: " + tar1, "" ) + "\n" +
+                                                WriteIf( buyach2, "Target 2 Done: " + tar2, "" ) +
+                                                WriteIf( sellach2, "Target 2 Done: " + tar2, "" ) + "\n" +
+                                                WriteIf( buyach3, "Target 3 Done: " + tar3, "" ) +
+                                                WriteIf( sellach3, "Target 3 Done: " + tar3, "" ) );
+}
+
+for( i = 0; i < BarCount; i++ )
+{
+    if( Buy[i] )
+    {
+        OUTcolor = ParamColor( "Outer Panel Color", colorTeal );
+        INUPcolor = ParamColor( "Inner Panel Upper", colorDarkGrey );
+        INDNcolor = ParamColor( "Inner Panel Lower", colorDarkOliveGreen );
+        TitleColor = ParamColor( "Title Color ", colorBlack );
+        SetChartBkColor( OUTcolor ); // color of outer border
+        SetChartBkGradientFill( INUPcolor, INDNcolor, TitleColor ); // color of inner panel
+    }
+
+    if( Sell[i] )
+    {
+        OUTcolor = ParamColor( "Outer Panel Color", colorTeal );
+        INUPcolor = ParamColor( "Inner Panel Upper2", colorDarkTeal );
+        INDNcolor = ParamColor( "Inner Panel Lower2", colorPlum );
+        TitleColor = ParamColor( "Title Color ", colorBlack );
+        SetChartBkColor( OUTcolor ); // color of outer border
+        SetChartBkGradientFill( INUPcolor, INDNcolor, TitleColor ); // color of inner panel
+    }
+}
+

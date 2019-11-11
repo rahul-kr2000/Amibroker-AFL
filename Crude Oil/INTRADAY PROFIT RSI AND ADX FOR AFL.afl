@@ -1,0 +1,94 @@
+//------------------------------------------------------------------------------
+//  Formula Name	:      INTRADAY PROFIT RSI AND ADX FOR AFL by pipschart
+//  Author	        :      KrT group
+//  Uploader	        :      www.pipschart.com
+//  E-mail		:      info@pipschart.com
+//  Amibroker Blog	:      www.pipschart.com/amibroker
+//  Origin		:      Modified & Collected from different sources.
+//------------------------------------------------------------------------------
+
+_SECTION_BEGIN("KrT group");
+GfxSetBkMode(1);
+X=750;
+Y=1;
+Font=10;
+GfxSelectFont("Impact",Font*2.2, 550);GfxSetTextColor(colorRed);GfxTextOut
+
+("KrT group",x,y);
+GfxSelectFont("Impact",Font*2.2, 550);GfxSetTextColor(colorGreen);GfxTextOut
+
+("RESEARCH",x+120,Y);
+
+_SECTION_END();
+
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------
+//
+//  Formula Name:   Intraday Strategy using RSI and ADX
+
+//------------------------------------------------------
+
+_SECTION_BEGIN("Intraday Strategy");
+
+SetTradeDelays( 1, 1, 1, 1 );
+SetOption( "InitialEquity", 200000);
+SetOption("FuturesMode" ,True);
+SetOption("MinShares",1);
+SetOption("CommissionMode",2);
+SetOption("CommissionAmount",50);
+SetOption("AccountMargin",10);
+SetOption("RefreshWhenCompleted",True);
+SetPositionSize(150,spsShares); //Use this for fixed position size
+//SetPositionSize(80,spsPercentOfEquity); //Use this for position size as a 
+
+//percent of Equity
+SetOption( "AllowPositionShrinking", True );
+BuyPrice=Open;
+SellPrice=Open;
+ShortPrice=Open;
+CoverPrice=Open;
+
+SetChartOptions(0,chartShowArrows|chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, 
+
+Close %g (%.1f%%) {{VALUES}}", O, H, L, C ));
+
+Plot( Close, "Price", colorWhite, styleCandle );
+
+RSIPeriods=17;
+ADXPeriods=14;
+
+Buy=RSI(RSIPeriods)>=75 AND ADX(ADXPeriods)>25;
+Short=RSI(RSIPeriods)<=25 AND ADX(ADXPeriods)>25 ;
+
+Buy=ExRem(Buy,Short);
+Short=ExRem(Short,Buy);
+
+Sell=Short OR TimeNum()==151500;
+Cover=Buy OR TimeNum()==151500;
+
+StopLoss=0.5;
+ApplyStop(Type=0,Mode=1,Amount=StopLoss);
+
+Plot( RSI(RSIPeriods), "RSI", color=colorBlue, ParamStyle( "Style", styleOwnScale) );
+Plot( ADX(ADXPeriods), "ADX", color=colorRed, ParamStyle( "Style", 
+
+styleOwnScale) );
+
+/* Plot Buy and Sell Signal Arrows */
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40);
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50);
+PlotShapes(IIf(Buy, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45);
+PlotShapes(IIf(Cover, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40);
+PlotShapes(IIf(Cover, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50);
+PlotShapes(IIf(Cover, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45);
+PlotShapes(IIf(Sell, shapeSquare, shapeNone),colorRed, 0, H, Offset=40);
+PlotShapes(IIf(Sell, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50);
+PlotShapes(IIf(Sell, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45);
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorRed, 0, H, Offset=40);
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50);
+PlotShapes(IIf(Short, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45);
+
+
+_SECTION_END();

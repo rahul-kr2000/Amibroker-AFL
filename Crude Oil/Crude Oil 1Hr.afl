@@ -1,0 +1,33 @@
+// Downloaded From https://www.WiseStockTrader.com
+_SECTION_BEGIN("Reverse 10 EMA Strategy");
+SetBarsRequired(100000,0);
+GraphXSpace = 15;
+SetChartOptions(0,chartShowArrows|chartShowDates);
+SetChartBkColor(ParamColor("bkcolor",ColorRGB(0,0, 0)));
+GfxSetBkMode(0); 
+GfxSetOverlayMode(1);
+SetBarFillColor(IIf(C>O,ParamColor("Candle UP Color", colorGreen),IIf(C<=O,ParamColor("Candle Down Color", colorRed),colorLightGrey)));
+Plot(C,"\nPrice",IIf(C>O,ParamColor("Wick UP Color", colorDarkGreen),IIf(C<=O,ParamColor("Wick Down Color", colorDarkRed),colorLightGrey)),64,0,0,0,0);
+ 
+SetPositionSize(2,spsShares);
+par1 = Optimize("par1",10,5,50,1);
+A = EMA(C,par1);
+Buy = Cross(A,C);
+Sell= Cross(C,A);
+ 
+Short = Sell;
+Cover = Buy;
+ 
+ApplyStop(stopTypeLoss, 
+         stopModePoint, 
+         Optimize( "max. loss stop level", 58, 50, 300, 1 ), 
+         True ); 
+Plot(A,"EMA10",colorRed);
+ 
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40);
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50);                      
+PlotShapes(IIf(Buy, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45); 
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorRed, 0, H, Offset=40);
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50);                      
+PlotShapes(IIf(Short, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45);
+_SECTION_END();

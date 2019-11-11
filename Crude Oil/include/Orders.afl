@@ -1,0 +1,297 @@
+
+///<-------
+// Usages:
+/*
+StaticVarRemove("*");
+CONST_PROFIT_POINTS = 10;
+STOPLOSS = 0; 
+SKIPBAR = 0;
+#include <orders.afl>
+ProcessTicks(false);
+*/
+//----->
+
+
+#include <algotrader-util.afl>
+	
+function ProcessTicks(SkipSqOff)
+{
+	SkipSquareOff = SkipSqOff;
+	//CONST_PROFIT_POINTS = 10;
+	//STOPLOSS = 0; 
+	
+	STOPLOSS = STOPLOSS * -1;
+
+	IsSqureOffTime = StrToNum(WriteIf(TimeNum() >= 230000, "1", "0"));
+
+	//IsSqureOffTime = StrToNum(WriteIf(Now(4) >= 231700, "1", "0"));
+
+	bbb = WriteIf( BarsSince( Buy ) == SKIPBAR, "1", "0" );
+	sss = WriteIf( BarsSince( Sell ) == SKIPBAR, "1", "0" );
+
+	//
+	// RunningPosition = 0 (none)
+	// RunningPosition = 1 (buy)
+	// RunningPosition = 2 (buy)
+	//
+	RunningPosition = Nz(StaticVarGet("RunningPosition"));
+	SLPoints = Nz(StaticVarGet("SLPoints"));
+	//
+	
+	
+	//SqOffPrice = Nz(StaticVarGet("SqOffPrice"));
+	SqOffPrice = C;
+	/*
+	if (RunningPosition == 1)
+	{
+		StaticVarSet("SqOffPrice", L);
+		//SqOffPrice = L;
+	}
+	if (RunningPosition == 2)
+	{
+		//SqOffPrice = H;
+		StaticVarSet("SqOffPrice", H);
+	}
+	*/
+
+	if( IsSqureOffTime == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) == 0 )
+	{
+		if( bbb == "1" )
+		{
+			StaticVarSet( "CommmodityOrderPlaced", 1 );
+			Price = StrToNum(NumToStr(C));
+			_TRACE( "BUY@" + Price + "@" + Date());
+			StaticVarSet( "AutoSquareOff", 0 );
+			StaticVarSet( "Price", Price);
+			StaticVarSet("RunningPosition",1);
+			SLPoints = StrToNum(NumToStr(L,1,False)) - 3;
+			StaticVarSet("SLPoints", SLPoints);
+			//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );
+			QuickOrder("Buy", calcDoubleQuantity( 1 ), C);
+		}
+		else
+		if( sss == "1" )
+		{
+			Price = StrToNum(NumToStr(C));
+			StaticVarSet( "CommmodityOrderPlaced", 2 );
+			_TRACE( "SELL@" + Price + "@" + Date());
+			StaticVarSet( "Price",  Price);
+			StaticVarSet( "AutoSquareOff", 0 );
+			StaticVarSet("RunningPosition",2);
+			SLPoints = StrToNum(NumToStr(H,1,False)) + 3;
+			StaticVarSet("SLPoints", SLPoints);
+			//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );
+			QuickOrder("Sell", calcDoubleQuantity( 1 ), C);
+		}
+	}
+
+	// Sell was running, now entered in Buy
+	if( IsSqureOffTime == 0 &&  Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) == 2 && bbb == "1" )
+	{
+		Price = StrToNum(NumToStr(C));
+		StaticVarSet( "CommmodityOrderPlaced", 1 );
+		StaticVarSet( "AutoSquareOff", 0 );
+		StaticVarSet( "Price", Price);
+		_TRACE( "BUY@" + Price + "@" + Date());
+		StaticVarSet("RunningPosition",1);
+		SLPoints = StrToNum(NumToStr(L,1,False)) - 3;
+		StaticVarSet("SLPoints", SLPoints);
+		//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Buy", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), BuyPrice, defaultTriggerPrice(), 1 );
+		QuickOrder("Buy", calcDoubleQuantity( 1 ), C);
+	}
+	// Buy was running, now entered in Sell
+	else
+	if( IsSqureOffTime == 0 &&  Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) == 1 && sss == "1" )
+	{
+		Price = StrToNum(NumToStr(C));
+		StaticVarSet( "CommmodityOrderPlaced", 2 );
+		StaticVarSet( "AutoSquareOff", 0 );
+		_TRACE( "SELL@" + Price + "@" + Date());
+		StaticVarSet( "Price", Price);
+		StaticVarSet("RunningPosition",2);
+		SLPoints = StrToNum(NumToStr(H,1,False)) + 3;
+		StaticVarSet("SLPoints", SLPoints);
+		//placeOrderUsingParams( AT_EXCHANGE, AT_SYMBOL, "Sell", AT_ORDER_TYPE, calcDoubleQuantity( 1 ), SellPrice, defaultTriggerPrice(), 1 );
+		QuickOrder("Sell", calcDoubleQuantity( 1 ), C);		
+	}
+	//-----------
+
+	// Check profit & losss with high and low
+
+	Price = Nz( StaticVarGet( "Price"));
+	ProfitOrLoss = Nz(StaticVarGet("ProfitOrLoss"));
+
+	if (RunningPosition == 1)
+	{
+		ProfitOrLoss = StrToNum(NumToStr( C - Price,1,False));
+		StaticVarSet("ProfitOrLoss", ProfitOrLoss);
+	}
+	if (RunningPosition == 2)
+	{
+		ProfitOrLoss = StrToNum(NumToStr( Price - C,1,False));
+		StaticVarSet("ProfitOrLoss", ProfitOrLoss);
+	}
+
+	//RunningPosition =  WriteIf(BarsSince( a ) < BarsSince( b ), "Buy", "Sell" );
+
+	//RunningPosition = StrToNum(WriteIf(BarsSince( a ) < BarsSince( b ), "1", "2" ));
+
+	//_TRACE("RunningPosition: " + RunningPosition + " - AutoSquareOff: " + Nz( StaticVarGet( "AutoSquareOff" ) ) + " - CommmodityOrderPlaced: " + Nz( StaticVarGet( "CommmodityOrderPlaced" ) ));
+
+	///*
+	///*
+	// SquareOff order for PROFIT
+	// Buy is running and profit is X points, put reverse Sell order
+	if( IsSqureOffTime == 0 &&  RunningPosition == 1 && CONST_PROFIT_POINTS > 0 && ProfitOrLoss >= CONST_PROFIT_POINTS && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1 );
+		StaticVarSet( "CommmodityOrderPlaced", 0 );
+		//_TRACE( "Rev-Sell@" + (Price+CONST_PROFIT_POINTS));
+		_TRACE( "Rev-Sell@" + C + "@" + Date());
+		QuickOrder("Sell", 1, C);
+		StaticVarSet("RunningPosition",0);
+		StaticVarSet( "AutoSquareOff", 0);
+		StaticVarSet( "CommmodityOrderPlaced", 0);
+		resetFirstOrder();    
+		
+		/*
+		// Once More 
+		Price = StrToNum(NumToStr(C));
+		StaticVarSet( "Price", Price);    
+		_TRACE( "BUY@" + C + "@" + Date());
+		StaticVarSet("RunningPosition",1);
+		StaticVarSet( "AutoSquareOff", 0);
+		StaticVarSet( "CommmodityOrderPlaced", 1);
+		QuickOrder("Sell", 1, C);
+		ThreadSleep(2000);
+		resetFirstOrder();
+		QuickOrder("Buy", 1, C);
+		*/
+		// End of Once More
+	}
+	// Sell is running and profit is X points, put reverse Buy order
+	else
+	if( IsSqureOffTime == 0 &&  RunningPosition == 2 && CONST_PROFIT_POINTS > 0 && ProfitOrLoss >= CONST_PROFIT_POINTS && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1 );
+		StaticVarSet( "CommmodityOrderPlaced", 0 );
+		//_TRACE( "Rev-Buy@" + (Price-CONST_PROFIT_POINTS));
+		_TRACE( "Rev-Buy@" + C + "@" + Date());
+		QuickOrder("Buy", 1, C);
+		resetFirstOrder();    
+		StaticVarSet("RunningPosition",0);
+		StaticVarSet( "AutoSquareOff", 0);
+		StaticVarSet( "CommmodityOrderPlaced", 0);
+		/*
+		// Once More 
+		Price = StrToNum(NumToStr(C));
+		StaticVarSet( "Price", Price);
+		_TRACE( "SELL@" + C + "@" + Date());
+		StaticVarSet("RunningPosition",2);
+		StaticVarSet( "AutoSquareOff", 0);
+		StaticVarSet( "CommmodityOrderPlaced", 2);
+		QuickOrder("Buy", 1, C);
+		ThreadSleep(2000);
+		resetFirstOrder();    
+		QuickOrder("Sell", 1, C);
+		// End of Once More		
+		*/
+	}
+	//*/
+
+
+	//StaticVarRemove("*");
+
+	LtpH = StrToNum(NumToStr(H,1,False));
+	LtpL = StrToNum(NumToStr(L,1,False));
+
+	///*
+	// SquareOff order for STOPLOSS
+	// Buy is running and loss is X points, squareoff order.
+
+	// For H/L stop loss
+	//if( RunningPosition == 1 && SLPoints > 0 && LtpL <= SLPoints && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	// For fixed SL points
+	if( IsSqureOffTime == 0 &&  RunningPosition == 1 && STOPLOSS != 0 && ProfitOrLoss <= STOPLOSS && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	// ??
+	//if( RunningPosition == 1 && STOPLOSS >=  StrToNum(NumToStr(C)) && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1 );
+		StaticVarSet( "CommmodityOrderPlaced", 0 );
+		StaticVarSet("RunningPosition",0);
+		_TRACE( "SL-Buy@" + C + "@" + Date());
+		QuickOrder("Sell", 1, C);
+		resetFirstOrder();
+		//_TRACE( "SL-Buy@" + SLPoints );
+	}
+	// Sell is running and profit is X points, put reverse Buy order
+	else
+	// For H/L stop loss
+	//if( RunningPosition == 2 && SLPoints > 0 && LtpH >= SLPoints && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	// For fixed SL points
+	if( IsSqureOffTime == 0 &&  RunningPosition == 2 && STOPLOSS != 0 && ProfitOrLoss <= STOPLOSS && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	// ???
+	//if( RunningPosition == 2 && STOPLOSS <=  StrToNum(NumToStr(C)) && Nz( StaticVarGet( "AutoSquareOff" ) ) == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1 );
+		StaticVarSet( "CommmodityOrderPlaced", 0 );
+		StaticVarSet("RunningPosition",0);
+		_TRACE( "SL-Sell@" + C + "@" + Date());
+		QuickOrder("Buy", 1, C);
+		resetFirstOrder();
+		//_TRACE( "SL-Sell@" + SLPoints );
+	}
+	//*/
+
+	// Buy / Sell squre of at EOD (11:30 PM)
+	if( IsSqureOffTime == 1 && SkipSquareOff == False && RunningPosition == 2 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1);
+		StaticVarSet( "CommmodityOrderPlaced", 0);
+		StaticVarSet( "SqOffType", 1);
+		StaticVarSet("RunningPosition",0);
+		StaticVarSet("CurrDate",StrToNum(NumToStr(DateNum(),1,False)));
+		resetFirstOrder();
+		_TRACE("Buy@" + C + "@SqOff");
+	}
+	else 
+	if( IsSqureOffTime == 1 && SkipSquareOff == False && RunningPosition == 1 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) > 0 )
+	{
+		StaticVarSet( "AutoSquareOff", 1 );
+		StaticVarSet( "CommmodityOrderPlaced", 0 );
+		StaticVarSet( "SqOffType", 2);
+		StaticVarSet("RunningPosition",0);
+		StaticVarSet("CurrDate",StrToNum(NumToStr(DateNum(),1,False)));
+		resetFirstOrder();
+		_TRACE("Sell@" + C + "@SqOff");
+	}
+
+	SqOffType = Nz(StaticVarGet("SqOffType"));
+	CurrDate = Nz(StaticVarGet("CurrDate"), StrToNum(NumToStr(DateNum(),1,False)));
+
+	/*
+	// Logic to continue previous day trade
+	if (SqOffType == 1 &&  StrToNum(NumToStr(DateNum(),1,False)) > CurrDate  && StrToNum(WriteIf(TimeNum() >= 090000, "1", "0")) == 1 && RunningPosition == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) == 0)
+	{
+		StaticVarSet("RunningPosition",2);
+		StaticVarSet( "CommmodityOrderPlaced", 2 );
+		StaticVarSet( "SqOffType", 0);
+		Price = StrToNum(NumToStr(C));
+		StaticVarSet( "Price", Price);
+		StaticVarSet( "AutoSquareOff", 0);
+		_TRACE("Sell@" + C + "@Continue");
+	}
+	else
+	if (SqOffType == 2 && StrToNum(NumToStr(DateNum(),1,False)) > CurrDate && StrToNum(WriteIf(TimeNum() >= 090000, "1", "0")) == 1 && RunningPosition == 0 && Nz( StaticVarGet( "CommmodityOrderPlaced" ) ) == 0)
+	{
+		StaticVarSet("RunningPosition",1);
+		StaticVarSet( "CommmodityOrderPlaced", 1 );
+		StaticVarSet( "SqOffType", 0);
+		Price = StrToNum(NumToStr(C));    
+		StaticVarSet( "Price", Price);
+		StaticVarSet( "AutoSquareOff", 0);
+		_TRACE("Buy@" + C + "@Continue");
+	}
+	*/
+	//StaticVarSet( "AutoSquareOff", 0);
+}
